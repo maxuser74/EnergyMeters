@@ -133,20 +133,6 @@ def api_readings():
     """API endpoint to get current readings as JSON"""
     global latest_readings, last_update_time, connection_status, historical_data
     
-    # Calculate summary values
-    summary = {}
-    if latest_readings:
-        if 372 in latest_readings:
-            summary['voltage'] = latest_readings[372]['value']
-        if 374 in latest_readings and 376 in latest_readings and 378 in latest_readings:
-            summary['total_current'] = (
-                latest_readings[374]['value'] + 
-                latest_readings[376]['value'] + 
-                latest_readings[378]['value']
-            )
-        if 390 in latest_readings:
-            summary['power'] = latest_readings[390]['value']
-    
     # Connection parameters for display
     connection_info = {
         'ip_address': meter_reader.cabina,
@@ -156,7 +142,6 @@ def api_readings():
     
     return jsonify({
         'readings': latest_readings,
-        'summary': summary,
         'connection_info': connection_info,
         'historical_data': historical_data,
         'last_update': last_update_time.isoformat() if last_update_time else None,
@@ -324,17 +309,22 @@ if __name__ == '__main__':
         
         .grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 15px;
             margin-bottom: 30px;
         }
         
         .card {
             background: #f8f9fa;
             border-radius: 10px;
-            padding: 20px;
+            padding: 15px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.1);
             transition: transform 0.3s ease;
+            text-align: center;
+            min-height: 120px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
         }
         
         .card:hover {
@@ -342,58 +332,21 @@ if __name__ == '__main__':
         }
         
         .card h3 {
-            margin: 0 0 10px 0;
+            margin: 0 0 8px 0;
             color: #495057;
-            font-size: 1.1em;
+            font-size: 0.95em;
         }
         
         .card .value {
-            font-size: 2.5em;
+            font-size: 1.8em;
             font-weight: bold;
             color: #667eea;
-            margin: 10px 0;
+            margin: 5px 0;
         }
         
         .card .unit {
             color: #6c757d;
-            font-size: 1.2em;
-        }
-        
-        .summary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 15px;
-            padding: 25px;
-            margin-top: 20px;
-        }
-        
-        .summary h2 {
-            margin: 0 0 20px 0;
-            text-align: center;
-        }
-        
-        .summary-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-        }
-        
-        .summary-item {
-            text-align: center;
-            padding: 15px;
-            background: rgba(255,255,255,0.1);
-            border-radius: 10px;
-        }
-        
-        .summary-item .label {
             font-size: 0.9em;
-            opacity: 0.8;
-        }
-        
-        .summary-item .value {
-            font-size: 1.8em;
-            font-weight: bold;
-            margin-top: 5px;
         }
         
         .last-update {
@@ -790,7 +743,7 @@ if __name__ == '__main__':
                 .then(data => {
                     updateStatus(data.connection_status);
                     updateConnectionInfo(data.connection_info);
-                    displayReadings(data.readings, data.summary);
+                    displayReadings(data.readings);
                     updateLastUpdateTime(data.last_update);
                     updateCharts(data.historical_data);
                 })
@@ -836,7 +789,7 @@ if __name__ == '__main__':
             }
         }
         
-        function displayReadings(readings, summary) {
+        function displayReadings(readings) {
             const container = document.getElementById('readings-container');
             
             if (!readings || Object.keys(readings).length === 0) {
@@ -869,44 +822,6 @@ if __name__ == '__main__':
             });
             
             html += '</div>';
-            
-            // Add summary section
-            if (summary && Object.keys(summary).length > 0) {
-                html += `
-                    <div class="summary">
-                        <h2>📊 Summary</h2>
-                        <div class="summary-grid">
-                `;
-                
-                if (summary.voltage !== undefined) {
-                    html += `
-                        <div class="summary-item">
-                            <div class="label">System Voltage</div>
-                            <div class="value">${summary.voltage.toFixed(1)} V</div>
-                        </div>
-                    `;
-                }
-                
-                if (summary.total_current !== undefined) {
-                    html += `
-                        <div class="summary-item">
-                            <div class="label">Total Current</div>
-                            <div class="value">${summary.total_current.toFixed(2)} A</div>
-                        </div>
-                    `;
-                }
-                
-                if (summary.power !== undefined) {
-                    html += `
-                        <div class="summary-item">
-                            <div class="label">Active Power</div>
-                            <div class="value">${summary.power.toFixed(1)} W</div>
-                        </div>
-                    `;
-                }
-                
-                html += '</div></div>';
-            }
             
             container.innerHTML = html;
         }
