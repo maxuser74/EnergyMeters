@@ -137,43 +137,6 @@
             font-size: 0.9em;
         }
         
-        .summary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 15px;
-            padding: 25px;
-            margin-top: 20px;
-        }
-        
-        .summary h2 {
-            margin: 0 0 20px 0;
-            text-align: center;
-        }
-        
-        .summary-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-        }
-        
-        .summary-item {
-            text-align: center;
-            padding: 15px;
-            background: rgba(255,255,255,0.1);
-            border-radius: 10px;
-        }
-        
-        .summary-item .label {
-            font-size: 0.9em;
-            opacity: 0.8;
-        }
-        
-        .summary-item .value {
-            font-size: 1.8em;
-            font-weight: bold;
-            margin-top: 5px;
-        }
-        
         .last-update {
             text-align: center;
             color: #6c757d;
@@ -568,7 +531,7 @@
                 .then(data => {
                     updateStatus(data.connection_status);
                     updateConnectionInfo(data.connection_info);
-                    displayReadings(data.readings, data.summary);
+                    displayReadings(data.readings);
                     updateLastUpdateTime(data.last_update);
                     updateCharts(data.historical_data);
                 })
@@ -614,7 +577,7 @@
             }
         }
         
-        function displayReadings(readings, summary) {
+        function displayReadings(readings) {
             const container = document.getElementById('readings-container');
             
             if (!readings || Object.keys(readings).length === 0) {
@@ -647,44 +610,6 @@
             });
             
             html += '</div>';
-            
-            // Add summary section
-            if (summary && Object.keys(summary).length > 0) {
-                html += `
-                    <div class="summary">
-                        <h2>📊 Summary</h2>
-                        <div class="summary-grid">
-                `;
-                
-                if (summary.voltage !== undefined) {
-                    html += `
-                        <div class="summary-item">
-                            <div class="label">System Voltage</div>
-                            <div class="value">${summary.voltage.toFixed(1)} V</div>
-                        </div>
-                    `;
-                }
-                
-                if (summary.total_current !== undefined) {
-                    html += `
-                        <div class="summary-item">
-                            <div class="label">Total Current</div>
-                            <div class="value">${summary.total_current.toFixed(2)} A</div>
-                        </div>
-                    `;
-                }
-                
-                if (summary.power !== undefined) {
-                    html += `
-                        <div class="summary-item">
-                            <div class="label">Active Power</div>
-                            <div class="value">${summary.power.toFixed(1)} W</div>
-                        </div>
-                    `;
-                }
-                
-                html += '</div></div>';
-            }
             
             container.innerHTML = html;
         }

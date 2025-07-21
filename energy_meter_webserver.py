@@ -7,6 +7,7 @@ Displays energy meter readings in a web interface with automatic refresh
 from flask import Flask, render_template, jsonify, request
 from pymodbus.constants import Endian
 from pymodbus.client import ModbusTcpClient
+from pymodbus.exceptions import ConnectionException
 import struct
 import time
 from datetime import datetime
@@ -23,21 +24,58 @@ historical_data = []  # Store historical data for graphs
 
 class EnergyMeterReader:
     def __init__(self):
-        self.cabina = '192.168.156.75'
-        self.nodo = 8
-        self.port = 502
+        # Multiple energy meter configurations
+        self.energy_meters = [
+            {
+                'id': 'cabinet1_node1',
+                'name': 'Cabinet 1 - Node 1',
+                'cabina': '192.168.1.75',
+                'nodo': 1,
+                'port': 502
+            },
+            {
+                'id': 'cabinet1_node13',
+                'name': 'Cabinet 1 - Node 13',
+                'cabina': '192.168.1.75',
+                'nodo': 13,
+                'port': 502
+            },
+            {
+                'id': 'cabinet2_node1',
+                'name': 'Cabinet 2 - Node 1',
+                'cabina': '192.168.1.76',
+                'nodo': 1,
+                'port': 502
+            },
+            {
+                'id': 'cabinet2_node14',
+                'name': 'Cabinet 2 - Node 14',
+                'cabina': '192.168.1.76',
+                'nodo': 14,
+                'port': 502
+            },
+            {
+                'id': 'cabinet3_node1',
+                'name': 'Cabinet 3 - Node 1',
+                'cabina': '192.168.1.77',
+                'nodo': 1,
+                'port': 502
+            }
+        ]
+        
+        # Register definitions (corrected based on register analysis)
         self.registers = {
-            372: "Tensione RMS media su 3 fasi V",
-            374: "Corrente di linea L1 A", 
-            376: "Corrente di linea L2 A",
-            378: "Corrente di linea L3 A",
-            390: "Potenza ATTIVA istantanea media RMS Watt"
+            358: "Tensione RMS stella L1-N V (RMS star voltage L1-N V)",
+            374: "Corrente di linea L1 A (Line current L1 A)", 
+            376: "Corrente di linea L2 A (Line current L2 A)",
+            378: "Corrente di linea L3 A (Line current L3 A)",
+            390: "Potenza ATTIVA somma RMS Watt (RMS sum active power Watt)"
         }
         
-    def read_single_register(self, client, registro):
+    def read_single_register(self, client, registro, nodo):
         """Read a single register and return the float value"""
         try:
-            request = client.read_holding_registers(address=registro, count=2, slave=self.nodo)
+            request = client.read_holding_registers(address=registro, count=2, slave=nodo)
             
             if request.isError():
                 return None
@@ -53,66 +91,194 @@ class EnergyMeterReader:
             return valore
             
         except Exception as e:
-            print(f"Error reading register {registro}: {e}")
+            print(f"Error reading register {registro} from node {nodo}: {e}")
             return None
     
-    def read_all_registers(self):
-        """Read all energy meter registers and return results"""
-        global latest_readings, last_update_time, connection_status, historical_data
+    def read_single_meter(self, meter_config):
+        """Read all registers from a single energy meter with resilience"""
+        cabina = meter_config['cabina']
+        nodo = meter_config['nodo']
+        port = meter_config['port']
+        meter_id = meter_config['id']
+        meter_name = meter_config['name']
         
-        client = ModbusTcpClient(self.cabina, port=self.port)
+        # Set shorter timeout to avoid hanging
+        client = ModbusTcpClient(cabina, port=port, timeout=3)
         
         try:
-            # Connect to the device
+            print(f"Attempting connection to {meter_name} ({cabina}:{port}, node {nodo})...")
+            
+            # Connect to the device with timeout handling
             connection_result = client.connect()
             if not connection_result:
-                connection_status = "Connection Failed"
-                print(f"ERROR: Cannot connect to energy meter at {self.cabina}:{self.port}")
-                return False
-                
-            connection_status = "Connected"
-            results = {}
+                print(f"⚠️  Connection failed: {meter_name} at {cabina}:{port}")
+                return {
+                    'meter_id': meter_id,
+                    'meter_name': meter_name,
+                    'connection_status': 'Connection Failed',
+                    'connection_info': {
+                        'ip_address': cabina,
+                        'port': port,
+                        'device_id': nodo
+                    },
+                    'readings': {},
+                    'error_details': f'Cannot connect to {cabina}:{port}'
+                }
             
-            # Read each register
+            print(f"✅ Connected to {meter_name}")
+            results = {}
+            failed_registers = []
+            
+            # Read each register with individual error handling
             for registro, description in self.registers.items():
-                value = self.read_single_register(client, registro)
-                if value is not None:
-                    results[registro] = {
-                        'value': value,
-                        'description': description
+                try:
+                    value = self.read_single_register(client, registro, nodo)
+                    if value is not None:
+                        results[registro] = {
+                            'value': value,
+                            'description': description
+                        }
+                        print(f"  📊 Register {registro}: {value:.2f}")
+                    else:
+                        failed_registers.append(registro)
+                        print(f"  ❌ Register {registro}: No data")
+                except Exception as reg_error:
+                    failed_registers.append(registro)
+                    print(f"  ❌ Register {registro}: Error - {reg_error}")
+            
+            # Determine connection status based on successful reads
+            if len(results) == len(self.registers):
+                status = 'Connected'
+            elif len(results) > 0:
+                status = f'Partial ({len(results)}/{len(self.registers)} registers)'
+            else:
+                status = 'No Data'
+            
+            return {
+                'meter_id': meter_id,
+                'meter_name': meter_name,
+                'connection_status': status,
+                'connection_info': {
+                    'ip_address': cabina,
+                    'port': port,
+                    'device_id': nodo
+                },
+                'readings': results,
+                'failed_registers': failed_registers,
+                'registers_read': f"{len(results)}/{len(self.registers)}"
+            }
+            
+        except ConnectionException as conn_error:
+            print(f"🔌 Connection error for {meter_name}: {conn_error}")
+            return {
+                'meter_id': meter_id,
+                'meter_name': meter_name,
+                'connection_status': 'Connection Error',
+                'connection_info': {
+                    'ip_address': cabina,
+                    'port': port,
+                    'device_id': nodo
+                },
+                'readings': {},
+                'error_details': f'Connection error: {str(conn_error)}'
+            }
+        except Exception as e:
+            print(f"💥 Unexpected error reading {meter_name}: {e}")
+            return {
+                'meter_id': meter_id,
+                'meter_name': meter_name,
+                'connection_status': f'Error: {type(e).__name__}',
+                'connection_info': {
+                    'ip_address': cabina,
+                    'port': port,
+                    'device_id': nodo
+                },
+                'readings': {},
+                'error_details': f'Unexpected error: {str(e)}'
+            }
+            
+        finally:
+            try:
+                client.close()
+                print(f"🔒 Connection closed for {meter_name}")
+            except Exception as close_error:
+                print(f"⚠️  Error closing connection for {meter_name}: {close_error}")
+
+    def read_all_registers(self):
+        """Read all energy meter registers from all configured meters with resilience"""
+        global latest_readings, last_update_time, connection_status, historical_data
+        
+        all_results = {}
+        successful_connections = 0
+        partial_connections = 0
+        
+        print(f"🔄 Reading from {len(self.energy_meters)} energy meters...")
+        
+        for meter_config in self.energy_meters:
+            print(f"📡 Processing {meter_config['name']}...")
+            meter_result = self.read_single_meter(meter_config)
+            all_results[meter_result['meter_id']] = meter_result
+            
+            # Count connection types for overall status
+            status = meter_result['connection_status']
+            if status == 'Connected':
+                successful_connections += 1
+            elif 'Partial' in status:
+                partial_connections += 1
+                print(f"⚠️  {meter_config['name']}: Partial connection - {status}")
+            else:
+                print(f"❌ {meter_config['name']}: Connection failed - {status}")
+        
+        # Update global variables
+        latest_readings = all_results
+        current_time = datetime.now()
+        last_update_time = current_time
+        
+        # Update overall connection status
+        total_meters = len(self.energy_meters)
+        if successful_connections == total_meters:
+            connection_status = "✅ All Connected"
+        elif successful_connections + partial_connections == total_meters:
+            connection_status = f"⚠️  {successful_connections} Connected, {partial_connections} Partial"
+        elif successful_connections > 0:
+            failed_connections = total_meters - successful_connections - partial_connections
+            connection_status = f"🔄 {successful_connections} Connected, {partial_connections} Partial, {failed_connections} Failed"
+        else:
+            connection_status = "❌ All Disconnected"
+        
+        # Store historical data for graphs (keep last 50 readings)
+        # Only store data from meters that have at least some readings
+        if all_results:
+            data_point = {
+                'timestamp': current_time.isoformat()
+            }
+            
+            # Add data for each meter that has readings
+            for meter_id, meter_data in all_results.items():
+                readings = meter_data.get('readings', {})
+                if readings:  # Only add data if we have readings
+                    data_point[meter_id] = {
+                        'voltage': readings.get(358, {}).get('value', 0),
+                        'current_l1': readings.get(374, {}).get('value', 0),
+                        'current_l2': readings.get(376, {}).get('value', 0),
+                        'current_l3': readings.get(378, {}).get('value', 0),
+                        'power': readings.get(390, {}).get('value', 0)
                     }
             
-            # Update global variables
-            latest_readings = results
-            current_time = datetime.now()
-            last_update_time = current_time
-            
-            # Store historical data for graphs (keep last 50 readings)
-            if results:
-                data_point = {
-                    'timestamp': current_time.isoformat(),
-                    'voltage': results.get(372, {}).get('value', 0),
-                    'current_l1': results.get(374, {}).get('value', 0),
-                    'current_l2': results.get(376, {}).get('value', 0),
-                    'current_l3': results.get(378, {}).get('value', 0),
-                    'power': results.get(390, {}).get('value', 0)
-                }
+            # Only store historical point if we have at least one meter with data
+            if any(meter_id in data_point for meter_id in all_results.keys() if meter_id != 'timestamp'):
                 historical_data.append(data_point)
                 
                 # Keep only last 50 readings (about 4 minutes of data)
                 if len(historical_data) > 50:
-                    historical_data.pop(0)
-            
-            print(f"Successfully read {len(results)} registers at {last_update_time.strftime('%H:%M:%S')}")
-            return True
-            
-        except Exception as e:
-            connection_status = f"Error: {str(e)}"
-            print(f"ERROR: {e}")
-            return False
-            
-        finally:
-            client.close()
+                    historical_data = historical_data[-50:]
+        
+        successful_readings = successful_connections + partial_connections
+        print(f"📊 Summary: {successful_connections} fully connected, {partial_connections} partial, {total_meters - successful_readings} failed")
+        print(f"⏰ Update completed at {last_update_time.strftime('%H:%M:%S')}")
+        
+        # Return True if we have at least some data (even partial)
+        return successful_readings > 0
 
 # Initialize the energy meter reader
 meter_reader = EnergyMeterReader()
@@ -133,16 +299,21 @@ def api_readings():
     """API endpoint to get current readings as JSON"""
     global latest_readings, last_update_time, connection_status, historical_data
     
-    # Connection parameters for display
-    connection_info = {
-        'ip_address': meter_reader.cabina,
-        'port': meter_reader.port,
-        'device_id': meter_reader.nodo
-    }
+    # Meter configurations for display
+    meter_configs = [
+        {
+            'id': meter['id'],
+            'name': meter['name'],
+            'ip_address': meter['cabina'],
+            'port': meter['port'],
+            'device_id': meter['nodo']
+        }
+        for meter in meter_reader.energy_meters
+    ]
     
     return jsonify({
         'readings': latest_readings,
-        'connection_info': connection_info,
+        'meter_configs': meter_configs,
         'historical_data': historical_data,
         'last_update': last_update_time.isoformat() if last_update_time else None,
         'connection_status': connection_status,
