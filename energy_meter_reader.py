@@ -17,7 +17,7 @@ try:
     PANDAS_AVAILABLE = True
 except ImportError:
     PANDAS_AVAILABLE = False
-    print("⚠️  pandas not available - will export to CSV instead of Excel")
+    print("WARNING: pandas not available - will export to CSV instead of Excel")
 
 def read_energy_meter_registers():
     """
@@ -164,7 +164,7 @@ def read_energy_meter_registers():
             df = pd.DataFrame(all_data)
             filename = f'energy_meter_readings_{timestamp}.xlsx'
             df.to_excel(filename, index=False, sheet_name='Energy Meter Readings')
-            print(f"\n✅ Data exported to Excel: {filename}")
+            print(f"SUCCESS: Data exported to Excel: {filename}")
         else:
             # Export to CSV as fallback
             filename = f'energy_meter_readings_{timestamp}.csv'
@@ -174,9 +174,9 @@ def read_energy_meter_registers():
                     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                     writer.writeheader()
                     writer.writerows(all_data)
-            print(f"\n✅ Data exported to CSV: {filename}")
+            print(f"SUCCESS: Data exported to CSV: {filename}")
         
-        print(f"📊 Total rows exported: {len(all_data)}")
+        print(f"Total rows exported: {len(all_data)}")
         
         # Display summary statistics
         if len(all_data) > 0 and PANDAS_AVAILABLE:
@@ -187,7 +187,7 @@ def read_energy_meter_registers():
                     df_numeric['Current_L2_A'] = pd.to_numeric(df_numeric['Current_L2_A'], errors='coerce')
                     df_numeric['Current_L3_A'] = pd.to_numeric(df_numeric['Current_L3_A'], errors='coerce')
                     
-                    print(f"\n📈 SUMMARY STATISTICS:")
+                    print(f"SUMMARY STATISTICS:")
                     print(f"   Total nodes read: {len(df_numeric)}")
                     print(f"   Max L1 current: {df_numeric['Current_L1_A'].max():.2f} A")
                     print(f"   Max L2 current: {df_numeric['Current_L2_A'].max():.2f} A")
@@ -205,7 +205,7 @@ def read_energy_meter_registers():
                 l2_values = [row['Current_L2_A'] for row in valid_data if row['Current_L2_A'] is not None]
                 l3_values = [row['Current_L3_A'] for row in valid_data if row['Current_L3_A'] is not None]
                 
-                print(f"\n📈 SUMMARY STATISTICS:")
+                print(f"SUMMARY STATISTICS:")
                 print(f"   Total nodes read: {len(valid_data)}")
                 if l1_values:
                     print(f"   Max L1 current: {max(l1_values):.2f} A")
@@ -219,10 +219,10 @@ def read_energy_meter_registers():
         
         # Show file location
         full_path = os.path.abspath(filename)
-        print(f"📁 File saved at: {full_path}")
+        print(f"File saved at: {full_path}")
         
     except Exception as e:
-        print(f"❌ Error exporting data: {e}")
+        print(f"ERROR: Error exporting data: {e}")
         if not PANDAS_AVAILABLE:
             print("   For Excel export, install: pip install pandas openpyxl")
     
