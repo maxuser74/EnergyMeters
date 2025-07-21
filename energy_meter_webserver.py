@@ -2,6 +2,7 @@
 """
 Energy Meter Web Server
 Displays energy meter readings in a web interface with automatic refresh
+Updated with multi-cabinet functionality
 """
 
 from flask import Flask, render_template, jsonify, request
@@ -24,43 +25,50 @@ historical_data = []  # Store historical data for graphs
 
 class EnergyMeterReader:
     def __init__(self):
-        # Multiple energy meter configurations
+        # Multiple energy meter configurations (individual meters for detailed view)
         self.energy_meters = [
             {
                 'id': 'cabinet1_node1',
                 'name': 'Cabinet 1 - Node 1',
-                'cabina': '192.168.1.75',
+                'cabina': '192.168.156.75',
                 'nodo': 1,
                 'port': 502
             },
             {
                 'id': 'cabinet1_node13',
                 'name': 'Cabinet 1 - Node 13',
-                'cabina': '192.168.1.75',
+                'cabina': '192.168.156.75',
                 'nodo': 13,
                 'port': 502
             },
             {
                 'id': 'cabinet2_node1',
                 'name': 'Cabinet 2 - Node 1',
-                'cabina': '192.168.1.76',
+                'cabina': '192.168.156.76',
                 'nodo': 1,
                 'port': 502
             },
             {
                 'id': 'cabinet2_node14',
                 'name': 'Cabinet 2 - Node 14',
-                'cabina': '192.168.1.76',
+                'cabina': '192.168.156.76',
                 'nodo': 14,
                 'port': 502
             },
             {
                 'id': 'cabinet3_node1',
                 'name': 'Cabinet 3 - Node 1',
-                'cabina': '192.168.1.77',
+                'cabina': '192.168.156.77',
                 'nodo': 1,
                 'port': 502
             }
+        ]
+        
+        # Cabinet configurations for multi-node view (all nodes in each cabinet)
+        self.cabinets = [
+            {'name': 'Cabinet 1', 'ip': '192.168.156.75', 'nodes': range(1, 27)},
+            {'name': 'Cabinet 2', 'ip': '192.168.156.76', 'nodes': range(1, 22)},
+            {'name': 'Cabinet 3', 'ip': '192.168.156.77', 'nodes': range(1, 16)}
         ]
         
         # Register definitions (corrected based on register analysis)
@@ -70,6 +78,13 @@ class EnergyMeterReader:
             376: "Corrente di linea L2 A (Line current L2 A)",
             378: "Corrente di linea L3 A (Line current L3 A)",
             390: "Potenza ATTIVA somma RMS Watt (RMS sum active power Watt)"
+        }
+        
+        # Simplified registers for multi-cabinet view (current only)
+        self.simple_registers = {
+            374: "Current L1 (A)", 
+            376: "Current L2 (A)",
+            378: "Current L3 (A)",
         }
         
     def read_single_register(self, client, registro, nodo):
@@ -111,7 +126,7 @@ class EnergyMeterReader:
             # Connect to the device with timeout handling
             connection_result = client.connect()
             if not connection_result:
-                print(f"⚠️  Connection failed: {meter_name} at {cabina}:{port}")
+                print(f"WARNING Connection failed: {meter_name} at {cabina}:{port}")
                 return {
                     'meter_id': meter_id,
                     'meter_name': meter_name,
@@ -125,7 +140,7 @@ class EnergyMeterReader:
                     'error_details': f'Cannot connect to {cabina}:{port}'
                 }
             
-            print(f"✅ Connected to {meter_name}")
+            print(f"Connected to {meter_name}")
             results = {}
             failed_registers = []
             
@@ -138,13 +153,13 @@ class EnergyMeterReader:
                             'value': value,
                             'description': description
                         }
-                        print(f"  📊 Register {registro}: {value:.2f}")
+                        print(f"  Register {registro}: {value:.2f}")
                     else:
                         failed_registers.append(registro)
-                        print(f"  ❌ Register {registro}: No data")
+                        print(f"  Register {registro}: No data")
                 except Exception as reg_error:
                     failed_registers.append(registro)
-                    print(f"  ❌ Register {registro}: Error - {reg_error}")
+                    print(f"  Register {registro}: Error - {reg_error}")
             
             # Determine connection status based on successful reads
             if len(results) == len(self.registers):
@@ -169,7 +184,7 @@ class EnergyMeterReader:
             }
             
         except ConnectionException as conn_error:
-            print(f"🔌 Connection error for {meter_name}: {conn_error}")
+            print(f"Connection error for {meter_name}: {conn_error}")
             return {
                 'meter_id': meter_id,
                 'meter_name': meter_name,
@@ -183,7 +198,7 @@ class EnergyMeterReader:
                 'error_details': f'Connection error: {str(conn_error)}'
             }
         except Exception as e:
-            print(f"💥 Unexpected error reading {meter_name}: {e}")
+            print(f"Unexpected error reading {meter_name}: {e}")
             return {
                 'meter_id': meter_id,
                 'meter_name': meter_name,
@@ -200,9 +215,9 @@ class EnergyMeterReader:
         finally:
             try:
                 client.close()
-                print(f"🔒 Connection closed for {meter_name}")
+                print(f"Connection closed for {meter_name}")
             except Exception as close_error:
-                print(f"⚠️  Error closing connection for {meter_name}: {close_error}")
+                print(f"Error closing connection for {meter_name}: {close_error}")
 
     def read_all_registers(self):
         """Read all energy meter registers from all configured meters with resilience"""
@@ -212,10 +227,10 @@ class EnergyMeterReader:
         successful_connections = 0
         partial_connections = 0
         
-        print(f"🔄 Reading from {len(self.energy_meters)} energy meters...")
+        print(f"Reading from {len(self.energy_meters)} energy meters...")
         
         for meter_config in self.energy_meters:
-            print(f"📡 Processing {meter_config['name']}...")
+            print(f"Processing {meter_config['name']}...")
             meter_result = self.read_single_meter(meter_config)
             all_results[meter_result['meter_id']] = meter_result
             
@@ -225,9 +240,9 @@ class EnergyMeterReader:
                 successful_connections += 1
             elif 'Partial' in status:
                 partial_connections += 1
-                print(f"⚠️  {meter_config['name']}: Partial connection - {status}")
+                print(f"WARNING {meter_config['name']}: Partial connection - {status}")
             else:
-                print(f"❌ {meter_config['name']}: Connection failed - {status}")
+                print(f"ERROR {meter_config['name']}: Connection failed - {status}")
         
         # Update global variables
         latest_readings = all_results
@@ -237,14 +252,14 @@ class EnergyMeterReader:
         # Update overall connection status
         total_meters = len(self.energy_meters)
         if successful_connections == total_meters:
-            connection_status = "✅ All Connected"
+            connection_status = "All Connected"
         elif successful_connections + partial_connections == total_meters:
-            connection_status = f"⚠️  {successful_connections} Connected, {partial_connections} Partial"
+            connection_status = f"WARNING {successful_connections} Connected, {partial_connections} Partial"
         elif successful_connections > 0:
             failed_connections = total_meters - successful_connections - partial_connections
-            connection_status = f"🔄 {successful_connections} Connected, {partial_connections} Partial, {failed_connections} Failed"
+            connection_status = f"MIXED {successful_connections} Connected, {partial_connections} Partial, {failed_connections} Failed"
         else:
-            connection_status = "❌ All Disconnected"
+            connection_status = "All Disconnected"
         
         # Store historical data for graphs (keep last 50 readings)
         # Only store data from meters that have at least some readings
@@ -274,11 +289,120 @@ class EnergyMeterReader:
                     historical_data = historical_data[-50:]
         
         successful_readings = successful_connections + partial_connections
-        print(f"📊 Summary: {successful_connections} fully connected, {partial_connections} partial, {total_meters - successful_readings} failed")
-        print(f"⏰ Update completed at {last_update_time.strftime('%H:%M:%S')}")
+        print(f"Summary: {successful_connections} fully connected, {partial_connections} partial, {total_meters - successful_readings} failed")
+        print(f"Update completed at {last_update_time.strftime('%H:%M:%S')}")
         
         # Return True if we have at least some data (even partial)
         return successful_readings > 0
+
+    def read_all_cabinet_data(self):
+        """
+        Read current data from all nodes in all cabinets (like energy_meter_reader.py)
+        Returns simplified data structure for tabular display
+        """
+        all_data = []
+        port = 502
+        
+        print(f"Reading all cabinet data from {len(self.cabinets)} cabinets...")
+        
+        for cabinet in self.cabinets:
+            cabinet_name = cabinet['name']
+            cabina = cabinet['ip']
+            nodes = cabinet['nodes']
+            
+            # Create Modbus TCP client for this cabinet
+            client = ModbusTcpClient(cabina, port=port, timeout=3)
+            
+            try:
+                # Connect to the device
+                connection_result = client.connect()
+                if not connection_result:
+                    print(f"ERROR Cannot connect to {cabinet_name} at {cabina}:{port}")
+                    # Add error row to data
+                    all_data.append({
+                        'cabinet': cabinet_name,
+                        'ip_address': cabina,
+                        'node': 'N/A',
+                        'current_l1_a': None,
+                        'current_l2_a': None, 
+                        'current_l3_a': None,
+                        'status': 'CONNECTION_FAILED',
+                        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    })
+                    continue
+                
+                print(f"Connected to {cabinet_name}")
+                
+                # Iterate through nodes for this cabinet
+                for nodo in nodes:
+                    node_results = {}
+                    node_status = "OK"
+                    
+                    # Read each register for this node
+                    for registro, description in self.simple_registers.items():
+                        try:
+                            # Read 2 registers (32-bit float)
+                            request = client.read_holding_registers(address=registro, count=2, slave=nodo)
+                            
+                            if request.isError():
+                                node_results[registro] = None
+                                node_status = "ERROR"
+                                continue
+                                
+                            # Decode the 32-bit float value
+                            high_word = request.registers[0]
+                            low_word = request.registers[1]
+                            
+                            # Convert to 32-bit float: word order is little endian (low word first)
+                            packed_data = struct.pack('>HH', low_word, high_word)
+                            valore = struct.unpack('>f', packed_data)[0]
+                            
+                            # Round to 2 decimal places
+                            valore = round(valore, 2)
+                            
+                            # Store result
+                            node_results[registro] = valore
+                            
+                        except Exception as e:
+                            node_results[registro] = None
+                            node_status = "FAIL"
+                    
+                    # Add to data collection
+                    all_data.append({
+                        'cabinet': cabinet_name,
+                        'ip_address': cabina,
+                        'node': nodo,
+                        'current_l1_a': node_results.get(374, None),
+                        'current_l2_a': node_results.get(376, None), 
+                        'current_l3_a': node_results.get(378, None),
+                        'status': node_status,
+                        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    })
+                
+            except Exception as e:
+                print(f"ERROR connecting to {cabinet_name}: {e}")
+                # Add error row to data
+                all_data.append({
+                    'cabinet': cabinet_name,
+                    'ip_address': cabina,
+                    'node': 'N/A',
+                    'current_l1_a': None,
+                    'current_l2_a': None, 
+                    'current_l3_a': None,
+                    'status': f'EXCEPTION: {str(e)[:50]}',
+                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                })
+                
+            finally:
+                # Always close the connection
+                try:
+                    client.close()
+                    print(f"Connection closed for {cabinet_name}")
+                except:
+                    pass
+        
+        print(f"Cabinet data read complete: {len(all_data)} total nodes")
+        return all_data
 
 # Initialize the energy meter reader
 meter_reader = EnergyMeterReader()
@@ -328,6 +452,54 @@ def api_status():
         'last_update': last_update_time.isoformat() if last_update_time else None,
         'timestamp': datetime.now().isoformat()
     })
+
+@app.route('/api/cabinet-data')
+def api_cabinet_data():
+    """API endpoint to get all cabinet data (all nodes from all cabinets)"""
+    try:
+        # Read all cabinet data
+        cabinet_data = meter_reader.read_all_cabinet_data()
+        
+        # Calculate summary statistics
+        valid_data = [row for row in cabinet_data if row['status'] == 'OK']
+        total_nodes = len(cabinet_data)
+        successful_nodes = len(valid_data)
+        
+        # Calculate current statistics if we have valid data
+        stats = {
+            'total_nodes': total_nodes,
+            'successful_nodes': successful_nodes,
+            'failed_nodes': total_nodes - successful_nodes
+        }
+        
+        if valid_data:
+            l1_currents = [row['current_l1_a'] for row in valid_data if row['current_l1_a'] is not None]
+            l2_currents = [row['current_l2_a'] for row in valid_data if row['current_l2_a'] is not None]
+            l3_currents = [row['current_l3_a'] for row in valid_data if row['current_l3_a'] is not None]
+            
+            if l1_currents:
+                stats['l1_max'] = round(max(l1_currents), 2)
+                stats['l1_avg'] = round(sum(l1_currents) / len(l1_currents), 2)
+            if l2_currents:
+                stats['l2_max'] = round(max(l2_currents), 2)
+                stats['l2_avg'] = round(sum(l2_currents) / len(l2_currents), 2)
+            if l3_currents:
+                stats['l3_max'] = round(max(l3_currents), 2)
+                stats['l3_avg'] = round(sum(l3_currents) / len(l3_currents), 2)
+        
+        return jsonify({
+            'success': True,
+            'data': cabinet_data,
+            'statistics': stats,
+            'timestamp': datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }), 500
 
 @app.route('/api/config', methods=['GET', 'POST'])
 def api_config():
@@ -380,7 +552,7 @@ if __name__ == '__main__':
     templates_dir = os.path.join(os.path.dirname(__file__), 'templates')
     os.makedirs(templates_dir, exist_ok=True)
     
-    # Create the HTML template
+    # Create the HTML template with tabs
     html_template = '''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -399,7 +571,7 @@ if __name__ == '__main__':
         }
         
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
             background: white;
             border-radius: 15px;
@@ -420,67 +592,56 @@ if __name__ == '__main__':
             font-size: 2.5em;
         }
         
+        /* Tab styles */
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #e9ecef;
+            margin-bottom: 20px;
+        }
+        
+        .tab {
+            padding: 12px 24px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 16px;
+            font-weight: 600;
+            color: #6c757d;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        
+        .tab:hover {
+            color: #667eea;
+            background-color: #f8f9fa;
+        }
+        
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            background-color: #f8f9fa;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
         .connection-info {
             background: #f8f9fa;
             border-radius: 10px;
             padding: 15px;
-            margin-top: 15px;
-            border-left: 4px solid #667eea;
-        }
-        
-        .connection-params {
-            display: flex;
-            justify-content: center;
-            gap: 30px;
-            flex-wrap: wrap;
-            margin-top: 10px;
-        }
-        
-        .param-item {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            min-width: 120px;
-        }
-        
-        .param-label {
-            font-size: 0.85em;
-            color: #6c757d;
-            margin-bottom: 5px;
-            text-transform: uppercase;
-            font-weight: 600;
-        }
-        
-        .param-value {
-            font-size: 1.1em;
-            color: #495057;
-            font-weight: bold;
-            font-family: 'Courier New', monospace;
-        }
-        
-        .status {
-            text-align: center;
             margin-bottom: 20px;
-            padding: 15px;
-            border-radius: 10px;
-            font-weight: bold;
-        }
-        
-        .status.connected {
-            background-color: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        
-        .status.error {
-            background-color: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
+            border-left: 4px solid #667eea;
         }
         
         .grid {
             display: grid;
-            grid-template-columns: repeat(5, 1fr);
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 15px;
             margin-bottom: 30px;
         }
@@ -520,133 +681,90 @@ if __name__ == '__main__':
             font-size: 0.9em;
         }
         
-        .last-update {
-            text-align: center;
-            color: #6c757d;
-            margin-top: 20px;
-            font-style: italic;
-        }
-        
-        .loading {
-            text-align: center;
-            color: #667eea;
-            font-size: 1.2em;
-            margin: 20px 0;
-        }
-        
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.5; }
-            100% { opacity: 1; }
-        }
-        
-        .loading {
-            animation: pulse 2s infinite;
-        }
-        
-        .charts-section {
-            margin-top: 40px;
-            padding-top: 30px;
-            border-top: 3px solid #667eea;
-        }
-        
-        .charts-title {
-            text-align: center;
-            color: #667eea;
-            font-size: 2em;
-            margin-bottom: 30px;
-        }
-        
-        .charts-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 30px;
-        }
-        
-        .chart-container {
-            background: white;
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
-            border: 1px solid #e9ecef;
-        }
-        
-        .chart-title {
-            text-align: center;
-            color: #495057;
-            font-size: 1.4em;
+        /* Table styles for cabinet view */
+        .table-container {
+            overflow-x: auto;
             margin-bottom: 20px;
-            font-weight: 600;
-        }
-        
-        .chart-canvas {
-            position: relative;
-            height: 300px;
-            width: 100%;
-        }
-        
-        @media (min-width: 1200px) {
-            .charts-grid {
-                grid-template-columns: 1fr 1fr;
-            }
-        }
-        
-        .config-section {
-            margin-bottom: 20px;
-            background: #f8f9fa;
             border-radius: 10px;
-            padding: 20px;
-            border: 1px solid #dee2e6;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         }
         
-        .config-title {
-            color: #495057;
-            font-size: 1.2em;
-            margin-bottom: 15px;
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+        
+        .data-table th,
+        .data-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .data-table th {
+            background-color: #667eea;
+            color: white;
             font-weight: 600;
+            position: sticky;
+            top: 0;
         }
         
-        .config-form {
+        .data-table tr:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .status-ok {
+            color: #28a745;
+            font-weight: bold;
+        }
+        
+        .status-error {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        
+        .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
             gap: 15px;
-            align-items: end;
+            margin-bottom: 20px;
         }
         
-        .form-group {
-            display: flex;
-            flex-direction: column;
+        .stat-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            border-left: 4px solid #667eea;
         }
         
-        .form-group label {
-            font-size: 0.9em;
+        .stat-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .stat-label {
             color: #6c757d;
-            margin-bottom: 5px;
-            font-weight: 600;
+            font-size: 0.9em;
+            margin-top: 5px;
         }
         
-        .form-group input {
-            padding: 8px 12px;
-            border: 1px solid #ced4da;
-            border-radius: 5px;
-            font-size: 1em;
-            font-family: 'Courier New', monospace;
-        }
-        
-        .form-group input:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.25);
+        .controls {
+            margin-bottom: 20px;
+            text-align: center;
         }
         
         .btn {
-            padding: 10px 20px;
             background: #667eea;
             color: white;
             border: none;
+            padding: 10px 20px;
             border-radius: 5px;
             cursor: pointer;
-            font-weight: 600;
+            font-size: 16px;
+            margin: 0 10px;
             transition: background-color 0.3s ease;
         }
         
@@ -659,23 +777,36 @@ if __name__ == '__main__':
             cursor: not-allowed;
         }
         
-        .config-message {
-            margin-top: 10px;
-            padding: 10px;
-            border-radius: 5px;
-            display: none;
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #6c757d;
+            font-style: italic;
         }
         
-        .config-message.success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
+        .last-update {
+            text-align: center;
+            color: #6c757d;
+            margin-top: 20px;
+            font-style: italic;
         }
         
-        .config-message.error {
+        .error-message {
             background: #f8d7da;
             color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
             border: 1px solid #f5c6cb;
+        }
+        
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            border: 1px solid #c3e6cb;
         }
     </style>
 </head>
@@ -688,478 +819,307 @@ if __name__ == '__main__':
             </div>
         </div>
         
-        <!-- Configuration Section -->
-        <div class="config-section">
-            <h3 class="config-title">⚙️ Connection Configuration</h3>
-            <form class="config-form" id="configForm">
-                <div class="form-group">
-                    <label for="ipAddress">IP Address (Cabina)</label>
-                    <input type="text" id="ipAddress" name="ipAddress" placeholder="192.168.156.75" pattern="^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$">
-                </div>
-                <div class="form-group">
-                    <label for="port">Port</label>
-                    <input type="number" id="port" name="port" placeholder="502" min="1" max="65535">
-                </div>
-                <div class="form-group">
-                    <label for="deviceId">Device ID (Nodo)</label>
-                    <input type="number" id="deviceId" name="deviceId" placeholder="8" min="1" max="255">
-                </div>
-                <div class="form-group">
-                    <button type="submit" class="btn" id="updateConfigBtn">Update Configuration</button>
-                </div>
-            </form>
-            <div id="configMessage" class="config-message"></div>
+        <!-- Tab Navigation -->
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('individual')">📊 Individual Meters</button>
+            <button class="tab" onclick="switchTab('cabinet')">🏗️ All Cabinets</button>
         </div>
         
-        <div id="status" class="status">
-            <div class="loading">Loading...</div>
+        <!-- Individual Meters Tab -->
+        <div id="individual-tab" class="tab-content active">
+            <div id="status" class="status">
+                <div class="loading">Loading...</div>
+            </div>
+            
+            <div id="readings-container">
+                <div class="loading">Fetching energy meter data...</div>
+            </div>
         </div>
         
-        <div id="readings-container">
-            <div class="loading">Fetching energy meter data...</div>
+        <!-- Cabinet View Tab -->
+        <div id="cabinet-tab" class="tab-content">
+            <div class="controls">
+                <button class="btn" onclick="loadCabinetData()" id="refreshCabinetBtn">🔄 Refresh Cabinet Data</button>
+                <button class="btn" onclick="exportCabinetData()" id="exportBtn" disabled>📥 Export to CSV</button>
+            </div>
+            
+            <div id="cabinet-stats" class="stats-grid" style="display: none;">
+                <!-- Statistics will be populated here -->
+            </div>
+            
+            <div id="cabinet-data-container">
+                <div class="loading">Click "Refresh Cabinet Data" to load all meters...</div>
+            </div>
         </div>
         
         <div id="last-update" class="last-update"></div>
-        
-        <!-- Charts Section -->
-        <div class="charts-section">
-            <h2 class="charts-title">📊 Real-time Trends</h2>
-            <div class="charts-grid">
-                <!-- Phase Currents Chart -->
-                <div class="chart-container">
-                    <h3 class="chart-title">🔌 Phase Currents (L1, L2, L3)</h3>
-                    <div class="chart-canvas">
-                        <canvas id="currentChart"></canvas>
-                    </div>
-                </div>
-                
-                <!-- Voltage Chart -->
-                <div class="chart-container">
-                    <h3 class="chart-title">⚡ System Voltage</h3>
-                    <div class="chart-canvas">
-                        <canvas id="voltageChart"></canvas>
-                    </div>
-                </div>
-                
-                <!-- Power Chart -->
-                <div class="chart-container" style="grid-column: 1 / -1;">
-                    <h3 class="chart-title">⚡ Active Power Consumption</h3>
-                    <div class="chart-canvas">
-                        <canvas id="powerChart"></canvas>
-                    </div>
-                </div>
-            </div>
-        </div>
     </div>
-
+    
     <script>
-        let lastUpdateTime = null;
-        let currentChart, voltageChart, powerChart;
+        let currentData = {};
+        let cabinetData = [];
         
-        // Initialize charts
-        function initializeCharts() {
-            // Phase Currents Chart
-            const currentCtx = document.getElementById('currentChart').getContext('2d');
-            currentChart = new Chart(currentCtx, {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [
-                        {
-                            label: 'L1 Current (A)',
-                            data: [],
-                            borderColor: '#ff6384',
-                            backgroundColor: 'rgba(255, 99, 132, 0.1)',
-                            borderWidth: 2,
-                            fill: false,
-                            tension: 0.4
-                        },
-                        {
-                            label: 'L2 Current (A)',
-                            data: [],
-                            borderColor: '#36a2eb',
-                            backgroundColor: 'rgba(54, 162, 235, 0.1)',
-                            borderWidth: 2,
-                            fill: false,
-                            tension: 0.4
-                        },
-                        {
-                            label: 'L3 Current (A)',
-                            data: [],
-                            borderColor: '#4bc0c0',
-                            backgroundColor: 'rgba(75, 192, 192, 0.1)',
-                            borderWidth: 2,
-                            fill: false,
-                            tension: 0.4
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            title: {
-                                display: true,
-                                text: 'Current (A)'
-                            }
-                        },
-                        x: {
-                            title: {
-                                display: true,
-                                text: 'Time'
-                            }
-                        }
-                    },
-                    plugins: {
-                        legend: {
-                            display: true,
-                            position: 'top'
-                        }
-                    }
-                }
+        // Tab switching functionality
+        function switchTab(tabName) {
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
             });
             
-            // Voltage Chart
-            const voltageCtx = document.getElementById('voltageChart').getContext('2d');
-            voltageChart = new Chart(voltageCtx, {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: 'Voltage (V)',
-                        data: [],
-                        borderColor: '#ffce56',
-                        backgroundColor: 'rgba(255, 206, 86, 0.1)',
-                        borderWidth: 3,
-                        fill: true,
-                        tension: 0.4
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: false,
-                            title: {
-                                display: true,
-                                text: 'Voltage (V)'
-                            }
-                        },
-                        x: {
-                            title: {
-                                display: true,
-                                text: 'Time'
-                            }
-                        }
-                    },
-                    plugins: {
-                        legend: {
-                            display: true,
-                            position: 'top'
-                        }
-                    }
-                }
+            // Remove active class from all tabs
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
             });
             
-            // Power Chart
-            const powerCtx = document.getElementById('powerChart').getContext('2d');
-            powerChart = new Chart(powerCtx, {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: 'Active Power (W)',
-                        data: [],
-                        borderColor: '#9966ff',
-                        backgroundColor: 'rgba(153, 102, 255, 0.1)',
-                        borderWidth: 3,
-                        fill: true,
-                        tension: 0.4
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            title: {
-                                display: true,
-                                text: 'Power (W)'
-                            }
-                        },
-                        x: {
-                            title: {
-                                display: true,
-                                text: 'Time'
-                            }
-                        }
-                    },
-                    plugins: {
-                        legend: {
-                            display: true,
-                            position: 'top'
-                        }
-                    }
-                }
-            });
+            // Show selected tab content
+            document.getElementById(tabName + '-tab').classList.add('active');
+            
+            // Add active class to clicked tab
+            event.target.classList.add('active');
         }
         
+        // Individual meters functions
         function updateReadings() {
             fetch('/api/readings')
                 .then(response => response.json())
                 .then(data => {
-                    updateStatus(data.connection_status);
-                    updateConnectionInfo(data.connection_info);
-                    displayReadings(data.readings);
-                    updateLastUpdateTime(data.last_update);
-                    updateCharts(data.historical_data);
+                    currentData = data;
+                    displayReadings(data);
+                    updateConnectionInfo(data);
+                    updateLastUpdate(data.last_update);
                 })
                 .catch(error => {
                     console.error('Error fetching readings:', error);
-                    updateStatus('Connection Error');
+                    document.getElementById('readings-container').innerHTML = 
+                        '<div class="error-message">Error fetching readings: ' + error.message + '</div>';
                 });
         }
         
-        function updateStatus(status) {
-            const statusEl = document.getElementById('status');
-            statusEl.innerHTML = `<strong>Status:</strong> ${status}`;
-            
-            if (status === 'Connected') {
-                statusEl.className = 'status connected';
-            } else {
-                statusEl.className = 'status error';
-            }
-        }
-        
-        function updateConnectionInfo(connectionInfo) {
-            const connectionEl = document.getElementById('connection-info');
-            if (connectionInfo) {
-                connectionEl.innerHTML = `
-                    <div style="text-align: center; color: #495057; margin-bottom: 10px;">
-                        <strong>📡 Connection Parameters</strong>
-                    </div>
-                    <div class="connection-params">
-                        <div class="param-item">
-                            <div class="param-label">IP Address (Cabina)</div>
-                            <div class="param-value">${connectionInfo.ip_address}</div>
-                        </div>
-                        <div class="param-item">
-                            <div class="param-label">Port</div>
-                            <div class="param-value">${connectionInfo.port}</div>
-                        </div>
-                        <div class="param-item">
-                            <div class="param-label">Device ID (Nodo)</div>
-                            <div class="param-value">${connectionInfo.device_id}</div>
-                        </div>
-                    </div>
-                `;
-            }
-        }
-        
-        function displayReadings(readings) {
-            const container = document.getElementById('readings-container');
-            
-            if (!readings || Object.keys(readings).length === 0) {
-                container.innerHTML = '<div class="loading">No data available</div>';
+        function displayReadings(data) {
+            if (!data.readings || Object.keys(data.readings).length === 0) {
+                document.getElementById('readings-container').innerHTML = 
+                    '<div class="loading">No energy meter data available</div>';
                 return;
             }
             
-            // Create individual register cards
             let html = '<div class="grid">';
             
-            const registerNames = {
-                372: { name: 'Voltage (3-phase avg)', unit: 'V', icon: '⚡' },
-                374: { name: 'Current L1', unit: 'A', icon: '🔌' },
-                376: { name: 'Current L2', unit: 'A', icon: '🔌' },
-                378: { name: 'Current L3', unit: 'A', icon: '🔌' },
-                390: { name: 'Active Power', unit: 'W', icon: '⚡' }
-            };
-            
-            Object.keys(readings).sort((a, b) => parseInt(a) - parseInt(b)).forEach(register => {
-                const reading = readings[register];
-                const info = registerNames[register] || { name: `Register ${register}`, unit: '', icon: '📊' };
+            // Process each meter
+            Object.keys(data.readings).forEach(meterId => {
+                const meter = data.readings[meterId];
+                const meterName = meter.meter_name || meterId;
+                const connectionStatus = meter.connection_status || 'Unknown';
+                const readings = meter.readings || {};
+                
+                // Status indicator
+                let statusClass = 'status-error';
+                let statusIcon = '❌';
+                if (connectionStatus === 'Connected') {
+                    statusClass = 'status-ok';
+                    statusIcon = '✅';
+                } else if (connectionStatus.includes('Partial')) {
+                    statusClass = 'status-warning';
+                    statusIcon = '⚠️';
+                }
                 
                 html += `
                     <div class="card">
-                        <h3>${info.icon} ${info.name}</h3>
-                        <div class="value">${reading.value.toFixed(2)}</div>
-                        <div class="unit">${info.unit}</div>
+                        <h3>${meterName}</h3>
+                        <div class="${statusClass}">${statusIcon} ${connectionStatus}</div>
+                        <div style="margin-top: 10px; font-size: 0.8em; color: #6c757d;">
+                            ${meter.connection_info ? meter.connection_info.ip_address + ':' + meter.connection_info.port + ' (Node ' + meter.connection_info.device_id + ')' : ''}
+                        </div>
+                        <div style="margin-top: 10px;">
+                            ${Object.keys(readings).length > 0 ? 
+                                Object.keys(readings).map(regKey => {
+                                    const reading = readings[regKey];
+                                    return `<div style="margin: 5px 0;"><strong>${reading.description.split('(')[0]}</strong><br>${reading.value.toFixed(2)} ${regKey == 358 ? 'V' : regKey == 390 ? 'W' : 'A'}</div>`;
+                                }).join('')
+                                : '<div style="color: #dc3545;">No data available</div>'
+                            }
+                        </div>
                     </div>
                 `;
             });
             
             html += '</div>';
-            
-            container.innerHTML = html;
+            document.getElementById('readings-container').innerHTML = html;
         }
         
-        function updateLastUpdateTime(updateTime) {
-            const lastUpdateEl = document.getElementById('last-update');
-            if (updateTime) {
-                const date = new Date(updateTime);
-                lastUpdateEl.innerHTML = `Last updated: ${date.toLocaleString()}`;
-            }
+        function updateConnectionInfo(data) {
+            const connectionInfo = document.getElementById('connection-info');
+            const status = data.connection_status || 'Unknown';
+            
+            connectionInfo.innerHTML = `
+                <strong>Connection Status:</strong> ${status}<br>
+                <strong>Total Meters:</strong> ${Object.keys(data.readings || {}).length}<br>
+                <strong>Last Update:</strong> ${data.last_update ? new Date(data.last_update).toLocaleString() : 'Never'}
+            `;
         }
         
-        function updateCharts(historicalData) {
-            if (!historicalData || historicalData.length === 0) return;
-            
-            // Prepare data for charts
-            const labels = historicalData.map(point => {
-                const date = new Date(point.timestamp);
-                return date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
-            });
-            
-            const currentL1Data = historicalData.map(point => point.current_l1);
-            const currentL2Data = historicalData.map(point => point.current_l2);
-            const currentL3Data = historicalData.map(point => point.current_l3);
-            const voltageData = historicalData.map(point => point.voltage);
-            const powerData = historicalData.map(point => point.power);
-            
-            // Update Current Chart
-            if (currentChart) {
-                currentChart.data.labels = labels;
-                currentChart.data.datasets[0].data = currentL1Data;
-                currentChart.data.datasets[1].data = currentL2Data;
-                currentChart.data.datasets[2].data = currentL3Data;
-                currentChart.update('none'); // No animation for real-time updates
-            }
-            
-            // Update Voltage Chart
-            if (voltageChart) {
-                voltageChart.data.labels = labels;
-                voltageChart.data.datasets[0].data = voltageData;
-                voltageChart.update('none');
-            }
-            
-            // Update Power Chart
-            if (powerChart) {
-                powerChart.data.labels = labels;
-                powerChart.data.datasets[0].data = powerData;
-                powerChart.update('none');
+        function updateLastUpdate(lastUpdate) {
+            const element = document.getElementById('last-update');
+            if (lastUpdate) {
+                element.textContent = `Last updated: ${new Date(lastUpdate).toLocaleString()}`;
+            } else {
+                element.textContent = 'No updates available';
             }
         }
         
-        function loadConfiguration() {
-            fetch('/api/config')
+        // Cabinet data functions
+        function loadCabinetData() {
+            const refreshBtn = document.getElementById('refreshCabinetBtn');
+            const container = document.getElementById('cabinet-data-container');
+            
+            refreshBtn.disabled = true;
+            refreshBtn.textContent = '🔄 Loading...';
+            container.innerHTML = '<div class="loading">Loading cabinet data, please wait...</div>';
+            
+            fetch('/api/cabinet-data')
                 .then(response => response.json())
                 .then(data => {
-                    if (data.config) {
-                        document.getElementById('ipAddress').value = data.config.ip_address;
-                        document.getElementById('port').value = data.config.port;
-                        document.getElementById('deviceId').value = data.config.device_id;
+                    if (data.success) {
+                        cabinetData = data.data;
+                        displayCabinetData(data.data, data.statistics);
+                        document.getElementById('exportBtn').disabled = false;
+                    } else {
+                        container.innerHTML = `<div class="error-message">Error: ${data.error}</div>`;
                     }
                 })
                 .catch(error => {
-                    console.error('Error loading configuration:', error);
+                    console.error('Error fetching cabinet data:', error);
+                    container.innerHTML = `<div class="error-message">Error fetching cabinet data: ${error.message}</div>`;
+                })
+                .finally(() => {
+                    refreshBtn.disabled = false;
+                    refreshBtn.textContent = '🔄 Refresh Cabinet Data';
                 });
         }
         
-        function updateConfiguration(event) {
-            event.preventDefault();
-            
-            const formData = new FormData(event.target);
-            const config = {
-                ip_address: formData.get('ipAddress'),
-                port: parseInt(formData.get('port')),
-                device_id: parseInt(formData.get('deviceId'))
-            };
-            
-            // Validate inputs
-            if (!config.ip_address || !config.port || !config.device_id) {
-                showConfigMessage('Please fill in all fields', 'error');
-                return;
-            }
-            
-            // Validate IP address format
-            const ipRegex = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/;
-            if (!ipRegex.test(config.ip_address)) {
-                showConfigMessage('Please enter a valid IP address', 'error');
-                return;
-            }
-            
-            // Validate port range
-            if (config.port < 1 || config.port > 65535) {
-                showConfigMessage('Port must be between 1 and 65535', 'error');
-                return;
-            }
-            
-            // Validate device ID range
-            if (config.device_id < 1 || config.device_id > 255) {
-                showConfigMessage('Device ID must be between 1 and 255', 'error');
-                return;
-            }
-            
-            // Disable button during update
-            const updateBtn = document.getElementById('updateConfigBtn');
-            updateBtn.disabled = true;
-            updateBtn.textContent = 'Updating...';
-            
-            fetch('/api/config', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(config)
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    showConfigMessage(data.message, 'success');
-                    // Clear charts when configuration changes
-                    if (currentChart) currentChart.data.labels = [];
-                    if (currentChart) currentChart.data.datasets.forEach(dataset => dataset.data = []);
-                    if (voltageChart) voltageChart.data.labels = [];
-                    if (voltageChart) voltageChart.data.datasets[0].data = [];
-                    if (powerChart) powerChart.data.labels = [];
-                    if (powerChart) powerChart.data.datasets[0].data = [];
-                    
-                    // Update charts
-                    if (currentChart) currentChart.update();
-                    if (voltageChart) voltageChart.update();
-                    if (powerChart) powerChart.update();
-                } else {
-                    showConfigMessage(data.message, 'error');
+        function displayCabinetData(data, stats) {
+            // Display statistics
+            const statsContainer = document.getElementById('cabinet-stats');
+            if (stats) {
+                let statsHtml = `
+                    <div class="stat-card">
+                        <div class="stat-value">${stats.total_nodes}</div>
+                        <div class="stat-label">Total Nodes</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${stats.successful_nodes}</div>
+                        <div class="stat-label">Connected</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${stats.failed_nodes}</div>
+                        <div class="stat-label">Failed</div>
+                    </div>
+                `;
+                
+                if (stats.l1_max !== undefined) {
+                    statsHtml += `
+                        <div class="stat-card">
+                            <div class="stat-value">${stats.l1_max}</div>
+                            <div class="stat-label">Max L1 Current (A)</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">${stats.l2_max}</div>
+                            <div class="stat-label">Max L2 Current (A)</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">${stats.l3_max}</div>
+                            <div class="stat-label">Max L3 Current (A)</div>
+                        </div>
+                    `;
                 }
-            })
-            .catch(error => {
-                console.error('Error updating configuration:', error);
-                showConfigMessage('Error updating configuration', 'error');
-            })
-            .finally(() => {
-                // Re-enable button
-                updateBtn.disabled = false;
-                updateBtn.textContent = 'Update Configuration';
-            });
-        }
-        
-        function showConfigMessage(message, type) {
-            const messageEl = document.getElementById('configMessage');
-            messageEl.textContent = message;
-            messageEl.className = `config-message ${type}`;
-            messageEl.style.display = 'block';
+                
+                statsContainer.innerHTML = statsHtml;
+                statsContainer.style.display = 'grid';
+            }
             
-            // Hide message after 5 seconds
-            setTimeout(() => {
-                messageEl.style.display = 'none';
-            }, 5000);
+            // Display table
+            const container = document.getElementById('cabinet-data-container');
+            
+            if (!data || data.length === 0) {
+                container.innerHTML = '<div class="loading">No cabinet data available</div>';
+                return;
+            }
+            
+            let tableHtml = `
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Cabinet</th>
+                                <th>IP Address</th>
+                                <th>Node</th>
+                                <th>Current L1 (A)</th>
+                                <th>Current L2 (A)</th>
+                                <th>Current L3 (A)</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+            
+            data.forEach(row => {
+                const statusClass = row.status === 'OK' ? 'status-ok' : 'status-error';
+                tableHtml += `
+                    <tr>
+                        <td>${row.cabinet}</td>
+                        <td>${row.ip_address}</td>
+                        <td>${row.node}</td>
+                        <td>${row.current_l1_a !== null ? row.current_l1_a.toFixed(2) : 'N/A'}</td>
+                        <td>${row.current_l2_a !== null ? row.current_l2_a.toFixed(2) : 'N/A'}</td>
+                        <td>${row.current_l3_a !== null ? row.current_l3_a.toFixed(2) : 'N/A'}</td>
+                        <td class="${statusClass}">${row.status}</td>
+                    </tr>
+                `;
+            });
+            
+            tableHtml += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            
+            container.innerHTML = tableHtml;
         }
         
-        // Initial load
+        function exportCabinetData() {
+            if (!cabinetData || cabinetData.length === 0) {
+                alert('No data to export. Please refresh cabinet data first.');
+                return;
+            }
+            
+            // Create CSV content
+            let csvContent = "Cabinet,IP Address,Node,Current L1 (A),Current L2 (A),Current L3 (A),Status,Timestamp\\n";
+            
+            cabinetData.forEach(row => {
+                csvContent += `"${row.cabinet}","${row.ip_address}","${row.node}",`;
+                csvContent += `"${row.current_l1_a !== null ? row.current_l1_a.toFixed(2) : 'N/A'}",`;
+                csvContent += `"${row.current_l2_a !== null ? row.current_l2_a.toFixed(2) : 'N/A'}",`;
+                csvContent += `"${row.current_l3_a !== null ? row.current_l3_a.toFixed(2) : 'N/A'}",`;
+                csvContent += `"${row.status}","${row.timestamp}"\\n`;
+            });
+            
+            // Create and download file
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', `energy_meter_readings_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+        
+        // Initialize
         document.addEventListener('DOMContentLoaded', function() {
-            initializeCharts();
-            loadConfiguration();
             updateReadings();
             
-            // Set up configuration form handler
-            document.getElementById('configForm').addEventListener('submit', updateConfiguration);
-            
-            // Update every 2 seconds (readings are updated every 5 seconds on server)
-            setInterval(updateReadings, 2000);
+            // Update individual readings every 5 seconds
+            setInterval(updateReadings, 5000);
         });
     </script>
 </body>
