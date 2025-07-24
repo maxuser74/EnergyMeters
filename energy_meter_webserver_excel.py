@@ -86,11 +86,10 @@ class ExcelBasedEnergyMeterReader:
             return []
 
     def load_registers_from_excel(self):
-        """Load register configuration from registri.xlsx (only Report=Yes registers)"""
+        """Load register configuration from registri.xlsx (only Report=Yes registers), and group by 'Type' column for badge grouping"""
         try:
             df_registri = pd.read_excel('registri.xlsx')
             registers = {}
-            
             print("Loading registers from registri.xlsx (Report=Yes only):")
             for _, row in df_registri.iterrows():
                 # Check if this register should be reported
@@ -98,13 +97,16 @@ class ExcelBasedEnergyMeterReader:
                 if report_status not in ['yes', 'y', '1', 'true']:
                     print(f"  Skipping register (Report={row['Report']}): {row['Lettura']}")
                     continue
-                    
                 end_address = int(row['Registro'])
                 description = str(row['Lettura'])
                 data_type = str(row['Lenght'])
                 source_unit = str(row['Readings']) if 'Readings' in row else ''
                 target_unit = str(row['Convert to']) if 'Convert to' in row else source_unit
-                
+                # Use 'Type' column for grouping, fallback to Lettura if missing
+                if 'Type' in row and pd.notna(row['Type']):
+                    category = str(row['Type']).strip().replace(' ', '_').replace('/', '_').lower()
+                else:
+                    category = description.strip().replace(' ', '_').replace('/', '_').lower()
                 # Calculate register count and start address based on data type
                 if data_type.lower() == 'float':
                     register_count = 2
@@ -115,7 +117,6 @@ class ExcelBasedEnergyMeterReader:
                 else:
                     register_count = 2
                     start_address = end_address - 1
-                
                 # Store register info
                 registers[start_address] = {
                     'description': description,
@@ -124,14 +125,12 @@ class ExcelBasedEnergyMeterReader:
                     'start_address': start_address,
                     'end_address': end_address,
                     'source_unit': source_unit,
-                    'target_unit': target_unit
+                    'target_unit': target_unit,
+                    'category': category
                 }
-                
-                print(f"  ✅ Register: {description} (Address: {start_address}-{end_address})")
-            
+                print(f"  ✅ Register: {description} (Type: {category}) (Address: {start_address}-{end_address})")
             print(f"Loaded {len(registers)} registers for reporting")
             return registers
-            
         except FileNotFoundError:
             print("ERROR: registri.xlsx file not found!")
             return {}
@@ -814,6 +813,7 @@ def create_html_template():
             margin-bottom: 1px;
         }
 
+
         .register-badge.voltage {
             border-color: #e74c3c;
             background: linear-gradient(135deg, #fff5f5, #ffeaea);
@@ -832,6 +832,28 @@ def create_html_template():
         .register-badge.other {
             border-color: #9b59b6;
             background: linear-gradient(135deg, #faf5ff, #f3e8ff);
+        }
+
+        /* Dynamic badge color for new categories (fallback: HSL by category name hash) */
+        [class*="register-badge."], .register-badge {
+            /* fallback, will be overridden below */
+        }
+        /* Example for a few possible new categories */
+        .register-badge.frequency {
+            border-color: #f39c12;
+            background: linear-gradient(135deg, #fffbe6, #fff3cd);
+        }
+        .register-badge.temperature {
+            border-color: #16a085;
+            background: linear-gradient(135deg, #e6fffa, #e0f7fa);
+        }
+        .register-badge.power_factor {
+            border-color: #8e44ad;
+            background: linear-gradient(135deg, #f5e6ff, #f3e8ff);
+        }
+        /* Generic fallback for any unknown category: use HSL based on category name hash */
+        .register-badge[data-category] {
+            /* JS will set style if not matched above */
         }
 
         .register-badge.error {
@@ -1352,90 +1374,57 @@ def create_html_template():
         function createUtilityCard(utilityId, utilityData) {
             const statusClass = getStatusClass(utilityData.status);
             const isMonitoring = monitoringIntervals.hasOwnProperty(utilityId);
-            
             let registersHtml = '';
             if (utilityData.registers && Object.keys(utilityData.registers).length > 0) {
-                // Categorize registers
-                const categories = {
-                    voltage: [],
-                    current: [],
-                    energy: [],
-                    other: []
-                };
-                
+                // Dynamically categorize registers by their category field
+                const categories = {};
                 for (const [regKey, regData] of Object.entries(utilityData.registers)) {
-                    const description = regData.description.toLowerCase();
-                    const unit = (regData.unit || '').toLowerCase();
-                    
-                    if (description.includes('voltage') || description.includes('tensione') || unit === 'v') {
-                        categories.voltage.push({key: regKey, data: regData});
-                    } else if (description.includes('current') || description.includes('corrente') || unit === 'a') {
-                        categories.current.push({key: regKey, data: regData});
-                    } else if (description.includes('energy') || description.includes('power') || description.includes('energia') || description.includes('potenza') || unit === 'kwh' || unit === 'w') {
-                        categories.energy.push({key: regKey, data: regData});
-                    } else {
-                        categories.other.push({key: regKey, data: regData});
-                    }
+                    let cat = regData.category || 'other';
+                    if (!categories[cat]) categories[cat] = [];
+                    categories[cat].push({key: regKey, data: regData});
                 }
-                
+                // Sort categories: voltage, current, energy, then others alphabetically
+                const mainOrder = ['voltage', 'current', 'energy'];
+                const allCats = Object.keys(categories);
+                const sortedCats = [
+                    ...mainOrder.filter(c => allCats.includes(c)),
+                    ...allCats.filter(c => !mainOrder.includes(c)).sort()
+                ];
+                // Responsive row: try to fit as many as possible on one row, wrap if needed
                 registersHtml = '<div class="registers-container">';
-                
-                // Voltage + Current on one row
-                if (categories.voltage.length > 0 || categories.current.length > 0) {
-                    registersHtml += `<div class="voltage-current-row">`;
-                    if (categories.voltage.length > 0) {
-                        registersHtml += `
-                            <div class="readings-section voltage-section">
-                                <div class="section-title">⚡ Voltage Readings</div>
-                                <div class="registers-grid voltage-grid">
-                        `;
-                        for (const reg of categories.voltage) {
-                            registersHtml += createRegisterBadge(reg.data, 'voltage');
-                        }
-                        registersHtml += '</div></div>';
-                    }
-                    if (categories.current.length > 0) {
-                        registersHtml += `
-                            <div class="readings-section current-section">
-                                <div class="section-title">🔌 Current Readings</div>
-                                <div class="registers-grid current-grid">
-                        `;
-                        for (const reg of categories.current) {
-                            registersHtml += createRegisterBadge(reg.data, 'current');
-                        }
-                        registersHtml += '</div></div>';
-                    }
-                    registersHtml += '</div>';
-                }
-                
-                // Energy section
-                if (categories.energy.length > 0) {
+                registersHtml += '<div class="voltage-current-row">';
+                let rowCount = 0;
+                let rowOpen = false;
+                let maxPerRow = 3; // Adjust for layout, can be made dynamic
+                sortedCats.forEach((cat, idx) => {
+                    // Section title and icon
+                    let icon = '';
+                    if (cat === 'voltage') icon = '⚡';
+                    else if (cat === 'current') icon = '🔌';
+                    else if (cat === 'energy') icon = '🔋';
+                    else icon = '📊';
+                    // Section CSS class
+                    let sectionClass = `${cat}-section`;
+                    // Grid class
+                    let gridClass = (cat === 'voltage' || cat === 'current') ? `${cat}-grid` : '';
+                    // Badge color class is the category name
                     registersHtml += `
-                        <div class="readings-section energy-section">
-                            <div class="section-title">🔋 Energy/Power Readings</div>
-                            <div class="registers-grid">
+                        <div class="readings-section ${sectionClass}">
+                            <div class="section-title">${icon} ${cat.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} Readings</div>
+                            <div class="registers-grid ${gridClass}">
                     `;
-                    for (const reg of categories.energy) {
-                        registersHtml += createRegisterBadge(reg.data, 'energy');
+                    for (const reg of categories[cat]) {
+                        registersHtml += createRegisterBadge(reg.data, cat);
                     }
                     registersHtml += '</div></div>';
-                }
-                
-                // Other section
-                if (categories.other.length > 0) {
-                    registersHtml += `
-                        <div class="readings-section other-section">
-                            <div class="section-title">📊 Other Readings</div>
-                            <div class="registers-grid">
-                    `;
-                    for (const reg of categories.other) {
-                        registersHtml += createRegisterBadge(reg.data, 'other');
+                    rowCount++;
+                    // If more than maxPerRow, close row and start new
+                    if ((rowCount % maxPerRow === 0) && (idx < sortedCats.length - 1)) {
+                        registersHtml += '</div><div class="voltage-current-row">';
                     }
-                    registersHtml += '</div></div>';
-                }
-                
+                });
                 registersHtml += '</div>';
-                
+                registersHtml += '</div>';
                 // Add charts section if monitoring is active
                 if (isMonitoring) {
                     registersHtml += `
@@ -1463,7 +1452,6 @@ def create_html_template():
             } else {
                 registersHtml = '<div class="no-data"><p>No register data available</p></div>';
             }
-            
             return `
                 <div class="utility-card" id="utility-${utilityId}">
                     <div class="utility-header">
@@ -1499,9 +1487,13 @@ def create_html_template():
         function createRegisterBadge(regData, category) {
             const badgeClass = regData.status === 'OK' ? category : 'error';
             const valueClass = regData.status === 'OK' ? '' : 'error';
-            
+            // Add data-category for dynamic coloring
+            let dataAttr = '';
+            if (regData.status === 'OK' && !['voltage','current','energy','other'].includes(category)) {
+                dataAttr = `data-category="${category}"`;
+            }
             return `
-                <div class="register-badge ${badgeClass}">
+                <div class="register-badge ${badgeClass}" ${dataAttr}>
                     <div class="register-name">${regData.description}</div>
                     <div class="register-value ${valueClass}">
                         ${regData.value}
@@ -1510,6 +1502,23 @@ def create_html_template():
                 </div>
             `;
         }
+
+        // Dynamic coloring for unknown categories using HSL hash
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(() => {
+                document.querySelectorAll('.register-badge[data-category]').forEach(badge => {
+                    const cat = badge.getAttribute('data-category');
+                    if (!badge.classList.contains('frequency') && !badge.classList.contains('temperature') && !badge.classList.contains('power_factor')) {
+                        // Hash category name to HSL color
+                        let hash = 0;
+                        for (let i = 0; i < cat.length; i++) hash = cat.charCodeAt(i) + ((hash << 5) - hash);
+                        const hue = Math.abs(hash) % 360;
+                        badge.style.borderColor = `hsl(${hue},70%,50%)`;
+                        badge.style.background = `linear-gradient(135deg, hsl(${hue},100%,98%), hsl(${hue},100%,92%))`;
+                    }
+                });
+            }, 100);
+        });
 
         function getStatusClass(status) {
             if (status === 'OK') return 'status-ok';
