@@ -449,23 +449,20 @@ def get_configuration():
     })
 
 def background_reading_thread():
-    """Background thread to periodically read all utilities"""
+    """Background thread to perform initial reading only at startup"""
     global energy_reader
     
-    print("Starting background reading thread...")
+    print("Starting initial background reading...")
     
-    while True:
-        try:
-            print("Background reading cycle starting...")
-            energy_reader.read_all_utilities()
-            print("Background reading cycle completed")
-            
-            # Wait 30 seconds before next reading
-            time.sleep(30)
-            
-        except Exception as e:
-            print(f"Error in background reading: {e}")
-            time.sleep(10)  # Wait less time on error
+    try:
+        print("Background reading cycle starting...")
+        energy_reader.read_all_utilities()
+        print("Background reading cycle completed")
+        print("Initial reading finished. Further readings will be user-controlled only.")
+        
+    except Exception as e:
+        print(f"Error in initial background reading: {e}")
+        print("Initial reading failed, but server will continue. Use manual refresh buttons.")
 
 # Create the HTML template directory and file
 def create_html_template():
@@ -770,8 +767,8 @@ def create_html_template():
         }
 
         .registers-grid.voltage-grid, .registers-grid.current-grid {
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 8px;
+            grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+            gap: 6px;
         }
 
         .register-badge {
@@ -785,37 +782,7 @@ def create_html_template():
         }
 
         .register-badge.voltage, .register-badge.current {
-            padding: 8px;
-        }
-
-        .register-badge:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        }
-
-        .register-badge.voltage {
-            border-color: #e74c3c;
-            background: linear-gradient(135deg, #fff5f5, #ffeaea);
-        }
-
-        .register-badge.current {
-            border-color: #3498db;
-            background: linear-gradient(135deg, #f0f8ff, #e6f3ff);
-        }
-
-        .register-badge.energy {
-            border-color: #27ae60;
-            background: linear-gradient(135deg, #f0fff4, #e6ffed);
-        }
-
-        .register-badge.other {
-            border-color: #9b59b6;
-            background: linear-gradient(135deg, #faf5ff, #f3e8ff);
-        }
-
-        .register-badge.error {
-            border-color: #e74c3c;
-            background: #fdf2f2;
+            padding: 5px;
         }
 
         .register-name {
@@ -843,70 +810,47 @@ def create_html_template():
         }
 
         .register-badge.voltage .register-value, .register-badge.current .register-value {
-            font-size: 1.2em;
-            margin-bottom: 2px;
+            font-size: 1.1em;
+            margin-bottom: 1px;
         }
 
-        .register-badge.voltage .register-value {
-            color: #c0392b;
+        .register-badge.voltage {
+            border-color: #e74c3c;
+            background: linear-gradient(135deg, #fff5f5, #ffeaea);
         }
 
-        .register-badge.current .register-value {
-            color: #2980b9;
+        .register-badge.current {
+            border-color: #3498db;
+            background: linear-gradient(135deg, #f0f8ff, #e6f3ff);
         }
 
-        .register-badge.energy .register-value {
-            color: #229954;
+        .register-badge.energy {
+            border-color: #27ae60;
+            background: linear-gradient(135deg, #f0fff4, #e6ffed);
         }
 
-        .register-badge.other .register-value {
-            color: #8e44ad;
+        .register-badge.other {
+            border-color: #9b59b6;
+            background: linear-gradient(135deg, #faf5ff, #f3e8ff);
         }
 
-        .register-value.error {
-            color: #e74c3c;
+        .register-badge.error {
+            border-color: #e74c3c;
+            background: #fdf2f2;
         }
 
-        .register-unit {
-            color: #7f8c8d;
-            font-size: 0.7em;
-            font-weight: 500;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+        .voltage-current-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 25px;
         }
 
-        .utility-status {
-            padding: 5px 10px;
-            border-radius: 20px;
-            font-size: 0.8em;
-            font-weight: bold;
-            text-transform: uppercase;
-        }
-
-        .status-ok {
-            background: #d5edda;
-            color: #155724;
-        }
-
-        .status-error {
-            background: #f8d7da;
-            color: #721c24;
-        }
-
-        .status-partial {
-            background: #fff3cd;
-            color: #856404;
-        }
-
-        .loading {
-            opacity: 0.7;
-            pointer-events: none;
-        }
-
-        .timestamp {
-            color: #7f8c8d;
-            font-size: 0.8em;
-            margin-top: 5px;
+        .readings-section.voltage-section,
+        .readings-section.current-section {
+            flex: 1 1 0;
+            min-width: 0;
+            margin-bottom: 0;
         }
 
         @media (max-width: 768px) {
@@ -1286,8 +1230,7 @@ def create_html_template():
             loadConfiguration();
             loadReadings();
             
-            // Auto-refresh every 30 seconds
-            setInterval(loadReadings, 30000);
+            // No automatic refresh - user controls all updates via buttons
         });
 
         // Cleanup monitoring intervals when page is closed
@@ -1317,7 +1260,7 @@ def create_html_template():
                             } catch (error) {
                                 console.error(`Error in continuous monitoring for ${utilityId}:`, error);
                             }
-                        }, 1000);
+                        }, 2000);
                     }
                 });
                 console.log('Page visible - resumed monitoring');
@@ -1533,7 +1476,7 @@ def create_html_template():
                             <div class="timestamp">
                                 ${utilityData.timestamp || ''}
                             </div>
-                            ${isMonitoring ? '<div class="monitor-status">🔴 Live Monitoring Active (1s)</div>' : ''}
+                            ${isMonitoring ? '<div class="monitor-status">🔴 Live Monitoring Active (2s)</div>' : ''}
                         </div>
                         <div class="utility-header-actions">
                             <button class="refresh-btn" onclick="refreshUtility('${utilityId}', this)">
@@ -1541,7 +1484,7 @@ def create_html_template():
                             </button>
                             <button class="monitor-toggle ${isMonitoring ? 'active' : ''}" 
                                     onclick="toggleMonitoring('${utilityId}', this)"
-                                    title="${isMonitoring ? 'Stop continuous monitoring' : 'Start continuous monitoring (1s)'}">
+                                    title="${isMonitoring ? 'Stop continuous monitoring' : 'Start continuous monitoring (2s)'}">
                                 ${isMonitoring ? '🛑 Stop' : '🔴 Monitor'}
                             </button>
                         </div>
@@ -1704,6 +1647,59 @@ def create_html_template():
                                     `;
                                     registersContainer.insertAdjacentHTML('afterend', chartsHtml);
                                     
+                                            valueElement.textContent = regData.value;
+                                            valueElement.className = regData.status === 'OK' ? 'register-value' : 'register-value error';
+                                        }
+                                        if (unitElement) {
+                                            unitElement.textContent = regData.unit || '';
+                                        }
+                                    }
+                                });
+                            });
+                            
+                            // Update utility status
+                            const statusElement = utilityCard.querySelector('.utility-status');
+                            if (statusElement) {
+                                statusElement.textContent = data.utility_data.status;
+                                statusElement.className = `utility-status ${getStatusClass(data.utility_data.status)}`;
+                            }
+                            
+                            // Update timestamp
+                            const timestampElement = utilityCard.querySelector('.timestamp');
+                            if (timestampElement) {
+                                timestampElement.textContent = data.utility_data.timestamp || '';
+                            }
+
+                            // Ensure charts are still present and functioning
+                            const chartsContainer = document.getElementById(`charts-${utilityId}`);
+                            if (!chartsContainer) {
+                                // Charts container is missing, recreate it
+                                console.log(`Charts missing for ${utilityId}, recreating...`);
+                                const registersContainer = utilityCard.querySelector('.registers-container');
+                                if (registersContainer) {
+                                    const chartsHtml = `
+                                        <div class="charts-container" id="charts-${utilityId}">
+                                            <div style="text-align: center; font-weight: bold; margin-bottom: 10px;">
+                                                📈 Real-time Monitoring Charts
+                                            </div>
+                                            <div class="charts-grid">
+                                                <div class="chart-section">
+                                                    <div class="chart-title voltage">⚡ Voltage</div>
+                                                    <div class="chart-canvas">
+                                                        <canvas id="voltage-chart-${utilityId}"></canvas>
+                                                    </div>
+                                                </div>
+                                                <div class="chart-section">
+                                                    <div class="chart-title current">🔌 Current</div>
+                                                    <div class="chart-canvas">
+                                                        <canvas id="current-chart-${utilityId}"></canvas>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    `;
+                                    registersContainer.insertAdjacentHTML('afterend', chartsHtml);
+                                    
                                     // Reinitialize charts
                                     setTimeout(() => {
                                         initializeCharts(utilityId);
@@ -1768,7 +1764,7 @@ def create_html_template():
                 
                 button.className = 'monitor-toggle';
                 button.textContent = '🔴 Monitor';
-                button.title = 'Start continuous monitoring (1s)';
+                button.title = 'Start continuous monitoring (2s)';
                 
                 // Remove monitor status
                 const utilityCard = document.getElementById(`utility-${utilityId}`);
@@ -1810,7 +1806,7 @@ def create_html_template():
                 if (utilityInfo && !utilityInfo.querySelector('.monitor-status')) {
                     const monitorStatus = document.createElement('div');
                     monitorStatus.className = 'monitor-status';
-                    monitorStatus.textContent = '🔴 Live Monitoring Active (1s)';
+                    monitorStatus.textContent = '🔴 Live Monitoring Active (2s)';
                     utilityInfo.appendChild(monitorStatus);
                 }
 
@@ -1855,7 +1851,7 @@ def create_html_template():
                     } catch (error) {
                         console.error(`Error in continuous monitoring for ${utilityId}:`, error);
                     }
-                }, 1000); // 1 second interval
+                }, 2000); // 2 second interval
                 
                 console.log(`Started continuous monitoring for utility: ${utilityId}`);
             }
@@ -1924,16 +1920,18 @@ if __name__ == '__main__':
     # Create HTML template
     create_html_template()
     
-    # Perform initial reading
-    print("Performing initial reading of all utilities...")
-    energy_reader.read_all_utilities()
-    
-    # Start background thread for automatic readings
+    # Perform initial reading in background thread (one time only)
+    print("Performing initial reading of all utilities (startup only)...")
     bg_thread = threading.Thread(target=background_reading_thread, daemon=True)
     bg_thread.start()
     
+    # Wait for initial reading to complete
+    bg_thread.join(timeout=10)  # Wait max 10 seconds for initial reading
+    
     print(f"\nStarting web server on http://localhost:5000")
     print(f"Configuration: {len(utilities_config)} utilities, {len(registers_config)} registers")
+    print("📋 Use 'Refresh All' or individual 'Refresh' buttons to update readings")
+    print("🔴 Use 'Monitor' buttons for real-time monitoring (2s intervals)")
     print("Press Ctrl+C to stop the server")
     print()
     
