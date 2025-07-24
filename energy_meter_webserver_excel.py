@@ -1380,30 +1380,32 @@ def create_html_template():
                 
                 registersHtml = '<div class="registers-container">';
                 
-                // Voltage section
-                if (categories.voltage.length > 0) {
-                    registersHtml += `
-                        <div class="readings-section voltage-section">
-                            <div class="section-title">⚡ Voltage Readings</div>
-                            <div class="registers-grid voltage-grid">
-                    `;
-                    for (const reg of categories.voltage) {
-                        registersHtml += createRegisterBadge(reg.data, 'voltage');
+                // Voltage + Current on one row
+                if (categories.voltage.length > 0 || categories.current.length > 0) {
+                    registersHtml += `<div class="voltage-current-row">`;
+                    if (categories.voltage.length > 0) {
+                        registersHtml += `
+                            <div class="readings-section voltage-section">
+                                <div class="section-title">⚡ Voltage Readings</div>
+                                <div class="registers-grid voltage-grid">
+                        `;
+                        for (const reg of categories.voltage) {
+                            registersHtml += createRegisterBadge(reg.data, 'voltage');
+                        }
+                        registersHtml += '</div></div>';
                     }
-                    registersHtml += '</div></div>';
-                }
-                
-                // Current section
-                if (categories.current.length > 0) {
-                    registersHtml += `
-                        <div class="readings-section current-section">
-                            <div class="section-title">🔌 Current Readings</div>
-                            <div class="registers-grid current-grid">
-                    `;
-                    for (const reg of categories.current) {
-                        registersHtml += createRegisterBadge(reg.data, 'current');
+                    if (categories.current.length > 0) {
+                        registersHtml += `
+                            <div class="readings-section current-section">
+                                <div class="section-title">🔌 Current Readings</div>
+                                <div class="registers-grid current-grid">
+                        `;
+                        for (const reg of categories.current) {
+                            registersHtml += createRegisterBadge(reg.data, 'current');
+                        }
+                        registersHtml += '</div></div>';
                     }
-                    registersHtml += '</div></div>';
+                    registersHtml += '</div>';
                 }
                 
                 // Energy section
@@ -1594,59 +1596,6 @@ def create_html_template():
                                         const unitElement = badge.querySelector('.register-unit');
                                         
                                         if (valueElement) {
-                                            valueElement.textContent = regData.value;
-                                            valueElement.className = regData.status === 'OK' ? 'register-value' : 'register-value error';
-                                        }
-                                        if (unitElement) {
-                                            unitElement.textContent = regData.unit || '';
-                                        }
-                                    }
-                                });
-                            });
-                            
-                            // Update utility status
-                            const statusElement = utilityCard.querySelector('.utility-status');
-                            if (statusElement) {
-                                statusElement.textContent = data.utility_data.status;
-                                statusElement.className = `utility-status ${getStatusClass(data.utility_data.status)}`;
-                            }
-                            
-                            // Update timestamp
-                            const timestampElement = utilityCard.querySelector('.timestamp');
-                            if (timestampElement) {
-                                timestampElement.textContent = data.utility_data.timestamp || '';
-                            }
-
-                            // Ensure charts are still present and functioning
-                            const chartsContainer = document.getElementById(`charts-${utilityId}`);
-                            if (!chartsContainer) {
-                                // Charts container is missing, recreate it
-                                console.log(`Charts missing for ${utilityId}, recreating...`);
-                                const registersContainer = utilityCard.querySelector('.registers-container');
-                                if (registersContainer) {
-                                    const chartsHtml = `
-                                        <div class="charts-container" id="charts-${utilityId}">
-                                            <div style="text-align: center; font-weight: bold; margin-bottom: 10px;">
-                                                📈 Real-time Monitoring Charts
-                                            </div>
-                                            <div class="charts-grid">
-                                                <div class="chart-section">
-                                                    <div class="chart-title voltage">⚡ Voltage</div>
-                                                    <div class="chart-canvas">
-                                                        <canvas id="voltage-chart-${utilityId}"></canvas>
-                                                    </div>
-                                                </div>
-                                                <div class="chart-section">
-                                                    <div class="chart-title current">🔌 Current</div>
-                                                    <div class="chart-canvas">
-                                                        <canvas id="current-chart-${utilityId}"></canvas>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    `;
-                                    registersContainer.insertAdjacentHTML('afterend', chartsHtml);
-                                    
                                             valueElement.textContent = regData.value;
                                             valueElement.className = regData.status === 'OK' ? 'register-value' : 'register-value error';
                                         }

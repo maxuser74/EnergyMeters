@@ -294,8 +294,8 @@
         }
 
         .registers-grid.voltage-grid, .registers-grid.current-grid {
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 8px;
+            grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+            gap: 6px;
         }
 
         .register-badge {
@@ -309,37 +309,7 @@
         }
 
         .register-badge.voltage, .register-badge.current {
-            padding: 8px;
-        }
-
-        .register-badge:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        }
-
-        .register-badge.voltage {
-            border-color: #e74c3c;
-            background: linear-gradient(135deg, #fff5f5, #ffeaea);
-        }
-
-        .register-badge.current {
-            border-color: #3498db;
-            background: linear-gradient(135deg, #f0f8ff, #e6f3ff);
-        }
-
-        .register-badge.energy {
-            border-color: #27ae60;
-            background: linear-gradient(135deg, #f0fff4, #e6ffed);
-        }
-
-        .register-badge.other {
-            border-color: #9b59b6;
-            background: linear-gradient(135deg, #faf5ff, #f3e8ff);
-        }
-
-        .register-badge.error {
-            border-color: #e74c3c;
-            background: #fdf2f2;
+            padding: 5px;
         }
 
         .register-name {
@@ -367,70 +337,47 @@
         }
 
         .register-badge.voltage .register-value, .register-badge.current .register-value {
-            font-size: 1.2em;
-            margin-bottom: 2px;
+            font-size: 1.1em;
+            margin-bottom: 1px;
         }
 
-        .register-badge.voltage .register-value {
-            color: #c0392b;
+        .register-badge.voltage {
+            border-color: #e74c3c;
+            background: linear-gradient(135deg, #fff5f5, #ffeaea);
         }
 
-        .register-badge.current .register-value {
-            color: #2980b9;
+        .register-badge.current {
+            border-color: #3498db;
+            background: linear-gradient(135deg, #f0f8ff, #e6f3ff);
         }
 
-        .register-badge.energy .register-value {
-            color: #229954;
+        .register-badge.energy {
+            border-color: #27ae60;
+            background: linear-gradient(135deg, #f0fff4, #e6ffed);
         }
 
-        .register-badge.other .register-value {
-            color: #8e44ad;
+        .register-badge.other {
+            border-color: #9b59b6;
+            background: linear-gradient(135deg, #faf5ff, #f3e8ff);
         }
 
-        .register-value.error {
-            color: #e74c3c;
+        .register-badge.error {
+            border-color: #e74c3c;
+            background: #fdf2f2;
         }
 
-        .register-unit {
-            color: #7f8c8d;
-            font-size: 0.7em;
-            font-weight: 500;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+        .voltage-current-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 25px;
         }
 
-        .utility-status {
-            padding: 5px 10px;
-            border-radius: 20px;
-            font-size: 0.8em;
-            font-weight: bold;
-            text-transform: uppercase;
-        }
-
-        .status-ok {
-            background: #d5edda;
-            color: #155724;
-        }
-
-        .status-error {
-            background: #f8d7da;
-            color: #721c24;
-        }
-
-        .status-partial {
-            background: #fff3cd;
-            color: #856404;
-        }
-
-        .loading {
-            opacity: 0.7;
-            pointer-events: none;
-        }
-
-        .timestamp {
-            color: #7f8c8d;
-            font-size: 0.8em;
-            margin-top: 5px;
+        .readings-section.voltage-section,
+        .readings-section.current-section {
+            flex: 1 1 0;
+            min-width: 0;
+            margin-bottom: 0;
         }
 
         @media (max-width: 768px) {
@@ -960,30 +907,32 @@
                 
                 registersHtml = '<div class="registers-container">';
                 
-                // Voltage section
-                if (categories.voltage.length > 0) {
-                    registersHtml += `
-                        <div class="readings-section voltage-section">
-                            <div class="section-title">⚡ Voltage Readings</div>
-                            <div class="registers-grid voltage-grid">
-                    `;
-                    for (const reg of categories.voltage) {
-                        registersHtml += createRegisterBadge(reg.data, 'voltage');
+                // Voltage + Current on one row
+                if (categories.voltage.length > 0 || categories.current.length > 0) {
+                    registersHtml += `<div class="voltage-current-row">`;
+                    if (categories.voltage.length > 0) {
+                        registersHtml += `
+                            <div class="readings-section voltage-section">
+                                <div class="section-title">⚡ Voltage Readings</div>
+                                <div class="registers-grid voltage-grid">
+                        `;
+                        for (const reg of categories.voltage) {
+                            registersHtml += createRegisterBadge(reg.data, 'voltage');
+                        }
+                        registersHtml += '</div></div>';
                     }
-                    registersHtml += '</div></div>';
-                }
-                
-                // Current section
-                if (categories.current.length > 0) {
-                    registersHtml += `
-                        <div class="readings-section current-section">
-                            <div class="section-title">🔌 Current Readings</div>
-                            <div class="registers-grid current-grid">
-                    `;
-                    for (const reg of categories.current) {
-                        registersHtml += createRegisterBadge(reg.data, 'current');
+                    if (categories.current.length > 0) {
+                        registersHtml += `
+                            <div class="readings-section current-section">
+                                <div class="section-title">🔌 Current Readings</div>
+                                <div class="registers-grid current-grid">
+                        `;
+                        for (const reg of categories.current) {
+                            registersHtml += createRegisterBadge(reg.data, 'current');
+                        }
+                        registersHtml += '</div></div>';
                     }
-                    registersHtml += '</div></div>';
+                    registersHtml += '</div>';
                 }
                 
                 // Energy section
