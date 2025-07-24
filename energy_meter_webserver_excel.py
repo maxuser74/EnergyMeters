@@ -783,6 +783,23 @@ def create_html_template():
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
         }
 
+        .register-badge.combined {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .combined-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .combined-item .value-number {
+            font-weight: bold;
+        }
+
         .register-badge.voltage, .register-badge.current {
             padding: 5px;
         }
@@ -1007,6 +1024,7 @@ def create_html_template():
         let monitoringIntervals = {}; // Store active monitoring intervals
         let chartInstances = {}; // Store chart instances for each utility
         let chartData = {}; // Store chart data history for each utility
+        const MONITOR_INTERVAL_MS = 2000; // Monitoring interval for charts
 
         // Chart configuration
         const chartConfig = {
@@ -1155,7 +1173,7 @@ def create_html_template():
             }
 
             const now = new Date().toLocaleTimeString();
-            const maxDataPoints = 50; // Keep last 50 data points
+            const maxDataPoints = Math.ceil(10000 / MONITOR_INTERVAL_MS); // 10s rolling window
 
             // Prepare voltage and current data
             const voltageData = {};
@@ -1285,7 +1303,7 @@ def create_html_template():
                             } catch (error) {
                                 console.error(`Error in continuous monitoring for ${utilityId}:`, error);
                             }
-                        }, 2000);
+                        }, MONITOR_INTERVAL_MS);
                     }
                 });
                 console.log('Page visible - resumed monitoring');
@@ -1418,9 +1436,7 @@ def create_html_template():
                             <div class="section-title">${icon} ${cat.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} Readings</div>
                             <div class="registers-grid ${gridClass}">
                     `;
-                    for (const reg of categories[cat]) {
-                        registersHtml += createRegisterBadge(reg.data, cat);
-                    }
+                    registersHtml += createCategoryBadge(cat, categories[cat].map(r => r.data));
                     registersHtml += '</div></div>';
                     rowCount++;
                     // If more than maxPerRow, close row and start new
@@ -1512,6 +1528,23 @@ def create_html_template():
                     <div class="register-unit">${regData.unit || ''}</div>
                 </div>
             `;
+        }
+
+        function createCategoryBadge(category, regs) {
+            const standardCats = ['voltage','current','energy','other'];
+            const dataAttr = !standardCats.includes(category) ? `data-category="${category}"` : '';
+            let badgeHtml = `<div class="register-badge ${category} combined" ${dataAttr}>`;
+            regs.forEach(reg => {
+                const valueClass = reg.status === 'OK' ? 'value-number' : 'value-number error';
+                badgeHtml += `
+                    <div class="combined-item">
+                        <div class="item-name">${reg.description}</div>
+                        <div class="${valueClass}">${reg.value} ${reg.unit || ''}</div>
+                    </div>
+                `;
+            });
+            badgeHtml += '</div>';
+            return badgeHtml;
         }
 
         // Dynamic coloring for unknown categories using HSL hash
@@ -1607,20 +1640,15 @@ def create_html_template():
                         const utilityCard = document.getElementById(`utility-${utilityId}`);
                         if (utilityCard && data.utility_data.registers) {
                             Object.entries(data.utility_data.registers).forEach(([regKey, regData]) => {
-                                // Update register badges
-                                const registerBadges = utilityCard.querySelectorAll('.register-badge');
-                                registerBadges.forEach(badge => {
-                                    const nameElement = badge.querySelector('.register-name');
+                                const items = utilityCard.querySelectorAll('.combined-item');
+                                items.forEach(item => {
+                                    const nameElement = item.querySelector('.item-name');
                                     if (nameElement && nameElement.textContent.trim() === regData.description) {
-                                        const valueElement = badge.querySelector('.register-value');
-                                        const unitElement = badge.querySelector('.register-unit');
-                                        
-                                        if (valueElement) {
-                                            valueElement.textContent = regData.value;
-                                            valueElement.className = regData.status === 'OK' ? 'register-value' : 'register-value error';
-                                        }
-                                        if (unitElement) {
-                                            unitElement.textContent = regData.unit || '';
+                                        const valElement = item.querySelector('.value-number');
+                                        if (valElement) {
+                                            valElement.textContent = `${regData.value} ${regData.unit || ''}`;
+                                            if (regData.status !== 'OK') valElement.classList.add('error');
+                                            else valElement.classList.remove('error');
                                         }
                                     }
                                 });
@@ -1820,7 +1848,7 @@ def create_html_template():
                     } catch (error) {
                         console.error(`Error in continuous monitoring for ${utilityId}:`, error);
                     }
-                }, 2000); // 2 second interval
+                }, MONITOR_INTERVAL_MS); // 2 second interval
                 
                 console.log(`Started continuous monitoring for utility: ${utilityId}`);
             }
