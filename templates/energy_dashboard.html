@@ -151,6 +151,53 @@
             background: #f39c12;
         }
 
+        .monitor-toggle {
+            background: #95a5a6;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+            margin-left: 10px;
+            font-size: 0.9em;
+        }
+
+        .monitor-toggle:hover {
+            transform: scale(1.05);
+        }
+
+        .monitor-toggle.active {
+            background: #e74c3c;
+            animation: pulse 2s infinite;
+        }
+
+        .monitor-toggle.disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+
+        .utility-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .monitor-status {
+            font-size: 0.8em;
+            color: #e74c3c;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+
         .registers-container {
             padding: 20px;
         }
@@ -329,6 +376,11 @@
                 gap: 15px;
             }
 
+            .utility-header-actions {
+                justify-content: center;
+                flex-wrap: wrap;
+            }
+
             .registers-grid {
                 grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
                 gap: 10px;
@@ -390,6 +442,15 @@
             margin: 20px 0;
             border: 1px solid #f5c6cb;
         }
+
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border: 1px solid #c3e6cb;
+        }
     </style>
 </head>
 <body>
@@ -410,6 +471,9 @@
             <div class="status-item">
                 <span id="utilitiesCount">Utilities: 0</span>
             </div>
+            <div class="status-item">
+                <span id="monitoringCount">Live Monitoring: 0</span>
+            </div>
             <button class="refresh-all-btn" id="refreshAllBtn" onclick="refreshAll()">
                 🔄 Refresh All
             </button>
@@ -425,6 +489,7 @@
 
     <script>
         let isRefreshing = false;
+        let monitoringIntervals = {}; // Store active monitoring intervals
 
         // Load initial data when page loads
         document.addEventListener('DOMContentLoaded', function() {
@@ -433,6 +498,40 @@
             
             // Auto-refresh every 30 seconds
             setInterval(loadReadings, 30000);
+        });
+
+        // Cleanup monitoring intervals when page is closed
+        window.addEventListener('beforeunload', function() {
+            Object.values(monitoringIntervals).forEach(interval => {
+                clearInterval(interval);
+            });
+        });
+
+        // Pause monitoring when page is not visible, resume when visible
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) {
+                // Page is hidden, pause all monitoring
+                Object.keys(monitoringIntervals).forEach(utilityId => {
+                    clearInterval(monitoringIntervals[utilityId]);
+                    // Don't delete the key, just clear the interval
+                });
+                console.log('Page hidden - paused all monitoring');
+            } else {
+                // Page is visible, resume monitoring for previously active utilities
+                Object.keys(monitoringIntervals).forEach(utilityId => {
+                    if (monitoringIntervals[utilityId] === null || monitoringIntervals[utilityId] === undefined) {
+                        // Restart the interval
+                        monitoringIntervals[utilityId] = setInterval(async () => {
+                            try {
+                                await refreshUtility(utilityId, null);
+                            } catch (error) {
+                                console.error(`Error in continuous monitoring for ${utilityId}:`, error);
+                            }
+                        }, 1000);
+                    }
+                });
+                console.log('Page visible - resumed monitoring');
+            }
         });
 
         async function loadConfiguration() {
@@ -493,16 +592,33 @@
                 return;
             }
             
+            // Check for utilities that no longer exist in the new configuration
+            const currentUtilityIds = Object.keys(data.readings);
+            const monitoredUtilityIds = Object.keys(monitoringIntervals);
+            
+            // Stop monitoring for utilities that no longer exist
+            monitoredUtilityIds.forEach(utilityId => {
+                if (!currentUtilityIds.includes(utilityId)) {
+                    console.log(`Stopping monitoring for removed utility: ${utilityId}`);
+                    clearInterval(monitoringIntervals[utilityId]);
+                    delete monitoringIntervals[utilityId];
+                }
+            });
+            
             let html = '';
             for (const [utilityId, utilityData] of Object.entries(data.readings)) {
                 html += createUtilityCard(utilityId, utilityData);
             }
             
             grid.innerHTML = html;
+            
+            // Update monitoring count
+            updateMonitoringCount();
         }
 
         function createUtilityCard(utilityId, utilityData) {
             const statusClass = getStatusClass(utilityData.status);
+            const isMonitoring = monitoringIntervals.hasOwnProperty(utilityId);
             
             let registersHtml = '';
             if (utilityData.registers && Object.keys(utilityData.registers).length > 0) {
@@ -589,7 +705,7 @@
             }
             
             return `
-                <div class="utility-card">
+                <div class="utility-card" id="utility-${utilityId}">
                     <div class="utility-header">
                         <div class="utility-info">
                             <h3>${utilityData.name}</h3>
@@ -602,10 +718,18 @@
                             <div class="timestamp">
                                 ${utilityData.timestamp || ''}
                             </div>
+                            ${isMonitoring ? '<div class="monitor-status">🔴 Live Monitoring Active (1s)</div>' : ''}
                         </div>
-                        <button class="refresh-btn" onclick="refreshUtility('${utilityId}', this)">
-                            🔄 Refresh
-                        </button>
+                        <div class="utility-header-actions">
+                            <button class="refresh-btn" onclick="refreshUtility('${utilityId}', this)">
+                                🔄 Refresh
+                            </button>
+                            <button class="monitor-toggle ${isMonitoring ? 'active' : ''}" 
+                                    onclick="toggleMonitoring('${utilityId}', this)"
+                                    title="${isMonitoring ? 'Stop continuous monitoring' : 'Start continuous monitoring (1s)'}">
+                                ${isMonitoring ? '🛑 Stop' : '🔴 Monitor'}
+                            </button>
+                        </div>
                     </div>
                     ${registersHtml}
                 </div>
@@ -639,20 +763,34 @@
             isRefreshing = true;
             const btn = document.getElementById('refreshAllBtn');
             btn.disabled = true;
-            btn.textContent = '🔄 Refreshing...';
+            btn.textContent = '🔄 Reloading Config & Refreshing...';
             
             try {
                 const response = await fetch('/api/refresh_all');
                 const data = await response.json();
                 
                 if (data.success) {
+                    // Update utilities count if configuration changed
+                    if (data.utilities_count !== undefined && data.registers_count !== undefined) {
+                        document.getElementById('utilitiesCount').textContent = 
+                            `Utilities: ${data.utilities_count} | Registers: ${data.registers_count}`;
+                    }
+                    
+                    // Show configuration reload message if provided
+                    if (data.message) {
+                        console.log('Configuration reloaded:', data.message);
+                        showSuccess(data.message);
+                    }
+                    
                     updateUI({
                         readings: data.readings,
                         last_update: data.timestamp,
-                        connection_status: 'Manual refresh completed'
+                        connection_status: 'Configuration reloaded and refreshed',
+                        utilities_count: data.utilities_count,
+                        registers_count: data.registers_count
                     });
                 } else {
-                    showError('Failed to refresh all utilities');
+                    showError(`Failed to refresh: ${data.error || 'Unknown error'}`);
                 }
                 
             } catch (error) {
@@ -666,11 +804,13 @@
         }
 
         async function refreshUtility(utilityId, button) {
-            if (button.disabled) return;
+            if (button && button.disabled) return;
             
-            button.disabled = true;
-            button.className = 'refresh-btn loading';
-            button.textContent = '🔄 Loading...';
+            if (button) {
+                button.disabled = true;
+                button.className = 'refresh-btn loading';
+                button.textContent = '🔄 Loading...';
+            }
             
             try {
                 const response = await fetch(`/api/refresh_utility/${utilityId}`);
@@ -678,20 +818,93 @@
                 
                 if (data.success) {
                     // Update just this utility in the UI
-                    const utilityCard = button.closest('.utility-card');
-                    const newCardHtml = createUtilityCard(utilityId, data.utility_data);
-                    utilityCard.outerHTML = newCardHtml;
+                    const utilityCard = document.getElementById(`utility-${utilityId}`);
+                    if (utilityCard) {
+                        const newCardHtml = createUtilityCard(utilityId, data.utility_data);
+                        utilityCard.outerHTML = newCardHtml;
+                    }
                 } else {
-                    showError(`Failed to refresh utility: ${data.error || 'Unknown error'}`);
+                    // Check if this is a configuration issue
+                    if (data.suggestion === 'reload_config') {
+                        showError(`${data.error} Click "Refresh All" to reload configuration.`);
+                    } else {
+                        showError(`Failed to refresh utility: ${data.error || 'Unknown error'}`);
+                    }
                 }
                 
             } catch (error) {
                 console.error('Error refreshing utility:', error);
                 showError('Error occurred while refreshing utility');
             } finally {
-                button.disabled = false;
-                button.className = 'refresh-btn';
-                button.textContent = '🔄 Refresh';
+                if (button) {
+                    button.disabled = false;
+                    button.className = 'refresh-btn';
+                    button.textContent = '🔄 Refresh';
+                }
+            }
+        }
+
+        function toggleMonitoring(utilityId, button) {
+            if (button.disabled) return;
+            
+            const isCurrentlyMonitoring = monitoringIntervals.hasOwnProperty(utilityId);
+            
+            if (isCurrentlyMonitoring) {
+                // Stop monitoring
+                clearInterval(monitoringIntervals[utilityId]);
+                delete monitoringIntervals[utilityId];
+                
+                button.className = 'monitor-toggle';
+                button.textContent = '🔴 Monitor';
+                button.title = 'Start continuous monitoring (1s)';
+                
+                // Remove monitor status
+                const utilityCard = document.getElementById(`utility-${utilityId}`);
+                const monitorStatus = utilityCard.querySelector('.monitor-status');
+                if (monitorStatus) {
+                    monitorStatus.remove();
+                }
+                
+                console.log(`Stopped monitoring utility: ${utilityId}`);
+                
+            } else {
+                // Start monitoring
+                button.className = 'monitor-toggle active';
+                button.textContent = '🛑 Stop';
+                button.title = 'Stop continuous monitoring';
+                
+                // Add monitor status
+                const utilityInfo = document.querySelector(`#utility-${utilityId} .utility-info`);
+                if (utilityInfo && !utilityInfo.querySelector('.monitor-status')) {
+                    const monitorStatus = document.createElement('div');
+                    monitorStatus.className = 'monitor-status';
+                    monitorStatus.textContent = '🔴 Live Monitoring Active (1s)';
+                    utilityInfo.appendChild(monitorStatus);
+                }
+                
+                // Start interval for continuous monitoring
+                monitoringIntervals[utilityId] = setInterval(async () => {
+                    try {
+                        await refreshUtility(utilityId, null); // Don't pass button to avoid UI changes
+                    } catch (error) {
+                        console.error(`Error in continuous monitoring for ${utilityId}:`, error);
+                    }
+                }, 1000); // 1 second interval
+                
+                console.log(`Started continuous monitoring for utility: ${utilityId}`);
+            }
+            
+            // Update monitoring count in status bar
+            updateMonitoringCount();
+        }
+
+        function updateMonitoringCount() {
+            const monitoringCount = Object.keys(monitoringIntervals).length;
+            const countElement = document.getElementById('monitoringCount');
+            if (countElement) {
+                countElement.textContent = `Live Monitoring: ${monitoringCount}`;
+                countElement.style.color = monitoringCount > 0 ? '#e74c3c' : '#7f8c8d';
+                countElement.style.fontWeight = monitoringCount > 0 ? 'bold' : 'normal';
             }
         }
 
@@ -708,6 +921,23 @@
             setTimeout(() => {
                 if (errorDiv.parentNode) {
                     errorDiv.parentNode.removeChild(errorDiv);
+                }
+            }, 5000);
+        }
+
+        function showSuccess(message) {
+            const grid = document.getElementById('utilitiesGrid');
+            const successDiv = document.createElement('div');
+            successDiv.className = 'success-message';
+            successDiv.textContent = message;
+            
+            // Insert at the top
+            grid.insertBefore(successDiv, grid.firstChild);
+            
+            // Remove after 5 seconds
+            setTimeout(() => {
+                if (successDiv.parentNode) {
+                    successDiv.parentNode.removeChild(successDiv);
                 }
             }, 5000);
         }
