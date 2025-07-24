@@ -103,7 +103,7 @@ class ExcelBasedEnergyMeterReader:
                 source_unit = str(row['Readings']) if 'Readings' in row else ''
                 target_unit = str(row['Convert to']) if 'Convert to' in row else source_unit
                 # Use 'Type' column for grouping, fallback to Lettura if missing
-                if 'Type' in row and pd.notna(row['Type']):
+                if 'Type' in df_registri.columns and pd.notna(row['Type']):
                     category = str(row['Type']).strip().replace(' ', '_').replace('/', '_').lower()
                 else:
                     category = description.strip().replace(' ', '_').replace('/', '_').lower()
@@ -1492,8 +1492,14 @@ def create_html_template():
             if (regData.status === 'OK' && !['voltage','current','energy','other'].includes(category)) {
                 dataAttr = `data-category="${category}"`;
             }
+            // Show the type/category in the badge for clarity
+            let typeLabel = '';
+            if (regData.category && regData.category !== category) {
+                typeLabel = `<div class='register-type'>${regData.category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</div>`;
+            }
             return `
                 <div class="register-badge ${badgeClass}" ${dataAttr}>
+                    ${typeLabel}
                     <div class="register-name">${regData.description}</div>
                     <div class="register-value ${valueClass}">
                         ${regData.value}

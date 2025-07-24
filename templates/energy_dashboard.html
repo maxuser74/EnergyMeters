@@ -1020,8 +1020,14 @@
             if (regData.status === 'OK' && !['voltage','current','energy','other'].includes(category)) {
                 dataAttr = `data-category="${category}"`;
             }
+            // Show the type/category in the badge for clarity
+            let typeLabel = '';
+            if (regData.category && regData.category !== category) {
+                typeLabel = `<div class='register-type'>${regData.category.replace(/_/g, ' ').replace(/\w/g, l => l.toUpperCase())}</div>`;
+            }
             return `
                 <div class="register-badge ${badgeClass}" ${dataAttr}>
+                    ${typeLabel}
                     <div class="register-name">${regData.description}</div>
                     <div class="register-value ${valueClass}">
                         ${regData.value}
