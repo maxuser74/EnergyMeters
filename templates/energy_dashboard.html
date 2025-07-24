@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Energy Meter Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+            color: white;
+            padding: 20px 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .status-bar {
+            background: #ecf0f1;
+            padding: 15px 30px;
+            border-bottom: 1px solid #bdc3c7;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #e74c3c;
+        }
+
+        .status-indicator.connected {
+            background: #27ae60;
+        }
+
+        .refresh-all-btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+
+        .refresh-all-btn:hover {
+            background: #2980b9;
+        }
+
+        .refresh-all-btn:disabled {
+            background: #95a5a6;
+            cursor: not-allowed;
+        }
+
+        .utilities-grid {
+            padding: 30px;
+        }
+
+        .utility-card {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .utility-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+        }
+
+        .utility-header {
+            background: #f8f9fa;
+            padding: 20px;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .utility-info h3 {
+            color: #2c3e50;
+            font-size: 1.3em;
+            margin-bottom: 5px;
+        }
+
+        .utility-details {
+            color: #7f8c8d;
+            font-size: 0.9em;
+        }
+
+        .refresh-btn {
+            background: #27ae60;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+
+        .refresh-btn:hover {
+            background: #229954;
+            transform: scale(1.05);
+        }
+
+        .refresh-btn:disabled {
+            background: #95a5a6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .refresh-btn.loading {
+            background: #f39c12;
+        }
+
+        .registers-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 15px;
+            padding: 20px;
+        }
+
+        .register-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+        }
+
+        .register-item.error {
+            border-left-color: #e74c3c;
+            background: #fdf2f2;
+        }
+
+        .register-item.ok {
+            border-left-color: #27ae60;
+        }
+
+        .register-name {
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 8px;
+            font-size: 0.9em;
+            line-height: 1.3;
+        }
+
+        .register-value {
+            font-size: 1.4em;
+            font-weight: bold;
+            color: #3498db;
+        }
+
+        .register-value.error {
+            color: #e74c3c;
+        }
+
+        .register-unit {
+            color: #7f8c8d;
+            font-size: 0.8em;
+            margin-left: 5px;
+        }
+
+        .utility-status {
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .status-ok {
+            background: #d5edda;
+            color: #155724;
+        }
+
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status-partial {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .loading {
+            opacity: 0.7;
+            pointer-events: none;
+        }
+
+        .timestamp {
+            color: #7f8c8d;
+            font-size: 0.8em;
+            margin-top: 5px;
+        }
+
+        @media (max-width: 768px) {
+            .status-bar {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 15px;
+            }
+
+            .utility-header {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 15px;
+            }
+
+            .registers-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .header h1 {
+                font-size: 2em;
+            }
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 50px;
+            color: #7f8c8d;
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏭 Energy Meter Dashboard</h1>
+            <p>Real-time monitoring of energy meters from Excel configuration</p>
+        </div>
+
+        <div class="status-bar">
+            <div class="status-item">
+                <div class="status-indicator" id="connectionIndicator"></div>
+                <span id="connectionStatus">Connecting...</span>
+            </div>
+            <div class="status-item">
+                <span id="lastUpdate">Last Update: Loading...</span>
+            </div>
+            <div class="status-item">
+                <span id="utilitiesCount">Utilities: 0</span>
+            </div>
+            <button class="refresh-all-btn" id="refreshAllBtn" onclick="refreshAll()">
+                🔄 Refresh All
+            </button>
+        </div>
+
+        <div class="utilities-grid" id="utilitiesGrid">
+            <div class="no-data">
+                <h3>Loading utilities...</h3>
+                <p>Please wait while we load the configuration from Excel files.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let isRefreshing = false;
+
+        // Load initial data when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            loadConfiguration();
+            loadReadings();
+            
+            // Auto-refresh every 30 seconds
+            setInterval(loadReadings, 30000);
+        });
+
+        async function loadConfiguration() {
+            try {
+                const response = await fetch('/api/configuration');
+                const data = await response.json();
+                
+                console.log('Configuration loaded:', data);
+                document.getElementById('utilitiesCount').textContent = 
+                    `Utilities: ${data.utilities_count} | Registers: ${data.registers_count}`;
+                
+            } catch (error) {
+                console.error('Error loading configuration:', error);
+            }
+        }
+
+        async function loadReadings() {
+            if (isRefreshing) return;
+            
+            try {
+                const response = await fetch('/api/readings');
+                const data = await response.json();
+                
+                updateUI(data);
+                
+            } catch (error) {
+                console.error('Error loading readings:', error);
+                showError('Failed to load readings. Please check connection.');
+            }
+        }
+
+        function updateUI(data) {
+            // Update connection status
+            const indicator = document.getElementById('connectionIndicator');
+            const status = document.getElementById('connectionStatus');
+            const lastUpdate = document.getElementById('lastUpdate');
+            
+            if (data.connection_status && data.connection_status.includes('Connected')) {
+                indicator.className = 'status-indicator connected';
+                status.textContent = data.connection_status;
+            } else {
+                indicator.className = 'status-indicator';
+                status.textContent = data.connection_status || 'Disconnected';
+            }
+            
+            lastUpdate.textContent = `Last Update: ${data.last_update || 'Never'}`;
+            
+            // Update utilities grid
+            const grid = document.getElementById('utilitiesGrid');
+            
+            if (!data.readings || Object.keys(data.readings).length === 0) {
+                grid.innerHTML = `
+                    <div class="no-data">
+                        <h3>No data available</h3>
+                        <p>Click "Refresh All" to load readings from all utilities.</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            let html = '';
+            for (const [utilityId, utilityData] of Object.entries(data.readings)) {
+                html += createUtilityCard(utilityId, utilityData);
+            }
+            
+            grid.innerHTML = html;
+        }
+
+        function createUtilityCard(utilityId, utilityData) {
+            const statusClass = getStatusClass(utilityData.status);
+            
+            let registersHtml = '';
+            if (utilityData.registers && Object.keys(utilityData.registers).length > 0) {
+                registersHtml = '<div class="registers-grid">';
+                for (const [regKey, regData] of Object.entries(utilityData.registers)) {
+                    const registerClass = regData.status === 'OK' ? 'ok' : 'error';
+                    const valueClass = regData.status === 'OK' ? '' : 'error';
+                    
+                    registersHtml += `
+                        <div class="register-item ${registerClass}">
+                            <div class="register-name">${regData.description}</div>
+                            <div class="register-value ${valueClass}">
+                                ${regData.value}
+                                <span class="register-unit">${regData.unit || ''}</span>
+                            </div>
+                        </div>
+                    `;
+                }
+                registersHtml += '</div>';
+            } else {
+                registersHtml = '<div class="no-data"><p>No register data available</p></div>';
+            }
+            
+            return `
+                <div class="utility-card">
+                    <div class="utility-header">
+                        <div class="utility-info">
+                            <h3>${utilityData.name}</h3>
+                            <div class="utility-details">
+                                Cabinet ${utilityData.cabinet} | Node ${utilityData.node} | ${utilityData.ip_address}
+                            </div>
+                            <div class="utility-status ${statusClass}">
+                                ${utilityData.status}
+                            </div>
+                            <div class="timestamp">
+                                ${utilityData.timestamp || ''}
+                            </div>
+                        </div>
+                        <button class="refresh-btn" onclick="refreshUtility('${utilityId}', this)">
+                            🔄 Refresh
+                        </button>
+                    </div>
+                    ${registersHtml}
+                </div>
+            `;
+        }
+
+        function getStatusClass(status) {
+            if (status === 'OK') return 'status-ok';
+            if (status === 'PARTIAL') return 'status-partial';
+            return 'status-error';
+        }
+
+        async function refreshAll() {
+            if (isRefreshing) return;
+            
+            isRefreshing = true;
+            const btn = document.getElementById('refreshAllBtn');
+            btn.disabled = true;
+            btn.textContent = '🔄 Refreshing...';
+            
+            try {
+                const response = await fetch('/api/refresh_all');
+                const data = await response.json();
+                
+                if (data.success) {
+                    updateUI({
+                        readings: data.readings,
+                        last_update: data.timestamp,
+                        connection_status: 'Manual refresh completed'
+                    });
+                } else {
+                    showError('Failed to refresh all utilities');
+                }
+                
+            } catch (error) {
+                console.error('Error refreshing all:', error);
+                showError('Error occurred while refreshing all utilities');
+            } finally {
+                isRefreshing = false;
+                btn.disabled = false;
+                btn.textContent = '🔄 Refresh All';
+            }
+        }
+
+        async function refreshUtility(utilityId, button) {
+            if (button.disabled) return;
+            
+            button.disabled = true;
+            button.className = 'refresh-btn loading';
+            button.textContent = '🔄 Loading...';
+            
+            try {
+                const response = await fetch(`/api/refresh_utility/${utilityId}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Update just this utility in the UI
+                    const utilityCard = button.closest('.utility-card');
+                    const newCardHtml = createUtilityCard(utilityId, data.utility_data);
+                    utilityCard.outerHTML = newCardHtml;
+                } else {
+                    showError(`Failed to refresh utility: ${data.error || 'Unknown error'}`);
+                }
+                
+            } catch (error) {
+                console.error('Error refreshing utility:', error);
+                showError('Error occurred while refreshing utility');
+            } finally {
+                button.disabled = false;
+                button.className = 'refresh-btn';
+                button.textContent = '🔄 Refresh';
+            }
+        }
+
+        function showError(message) {
+            const grid = document.getElementById('utilitiesGrid');
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error-message';
+            errorDiv.textContent = message;
+            
+            // Insert at the top
+            grid.insertBefore(errorDiv, grid.firstChild);
+            
+            // Remove after 5 seconds
+            setTimeout(() => {
+                if (errorDiv.parentNode) {
+                    errorDiv.parentNode.removeChild(errorDiv);
+                }
+            }, 5000);
+        }
+    </script>
+</body>
+</html>

@@ -71,58 +71,13 @@ class EnergyMeterReader:
             {'name': 'Cabinet 3', 'ip': '192.168.156.77', 'nodes': range(1, 16)}
         ]
         
-        # Register definitions (comprehensive list from registry.xlsx)
+        # Register definitions (corrected based on register analysis)
         self.registers = {
-            # Voltage registers
             358: "Tensione RMS stella L1-N V (RMS star voltage L1-N V)",
-            360: "Tensione RMS stella L2-N V (RMS star voltage L2-N V)", 
-            362: "Tensione RMS stella L3-N V (RMS star voltage L3-N V)",
-            364: "Tensione RMS concatenata L1-L2 V (RMS line voltage L1-L2 V)",
-            366: "Tensione RMS concatenata L2-L3 V (RMS line voltage L2-L3 V)",
-            368: "Tensione RMS concatenata L3-L1 V (RMS line voltage L3-L1 V)",
-            
-            # Current registers  
             374: "Corrente di linea L1 A (Line current L1 A)", 
             376: "Corrente di linea L2 A (Line current L2 A)",
             378: "Corrente di linea L3 A (Line current L3 A)",
-            380: "Corrente di neutro A (Neutral current A)",
-            
-            # Power registers
-            390: "Potenza ATTIVA somma RMS Watt (RMS sum active power Watt)",
-            392: "Potenza ATTIVA L1 Watt (Active power L1 Watt)",
-            394: "Potenza ATTIVA L2 Watt (Active power L2 Watt)", 
-            396: "Potenza ATTIVA L3 Watt (Active power L3 Watt)",
-            398: "Potenza REATTIVA somma RMS VAr (RMS sum reactive power VAr)",
-            400: "Potenza REATTIVA L1 VAr (Reactive power L1 VAr)",
-            402: "Potenza REATTIVA L2 VAr (Reactive power L2 VAr)",
-            404: "Potenza REATTIVA L3 VAr (Reactive power L3 VAr)",
-            406: "Potenza APPARENTE somma RMS VA (RMS sum apparent power VA)",
-            408: "Potenza APPARENTE L1 VA (Apparent power L1 VA)",
-            410: "Potenza APPARENTE L2 VA (Apparent power L2 VA)",
-            412: "Potenza APPARENTE L3 VA (Apparent power L3 VA)",
-            
-            # Power factor registers
-            414: "Fattore di potenza somma (Sum power factor)",
-            416: "Fattore di potenza L1 (Power factor L1)",
-            418: "Fattore di potenza L2 (Power factor L2)",
-            420: "Fattore di potenza L3 (Power factor L3)",
-            
-            # Frequency
-            422: "Frequenza Hz (Frequency Hz)",
-            
-            # Energy registers
-            424: "Energia ATTIVA import Wh (Active energy import Wh)",
-            426: "Energia ATTIVA export Wh (Active energy export Wh)",
-            428: "Energia REATTIVA import VArh (Reactive energy import VArh)",
-            430: "Energia REATTIVA export VArh (Reactive energy export VArh)"
-        }
-        
-        # Single cabinet configuration for detailed view
-        self.single_cabinet_config = {
-            'name': 'Cabinet 1',
-            'ip': '192.168.156.75',
-            'node': 1,
-            'port': 502
+            390: "Potenza ATTIVA somma RMS Watt (RMS sum active power Watt)"
         }
         
         # Simplified registers for multi-cabinet view (current only)
@@ -154,135 +109,7 @@ class EnergyMeterReader:
             print(f"Error reading register {registro} from node {nodo}: {e}")
             return None
     
-    def read_single_cabinet_detailed(self):
-        """Read detailed data from a single cabinet/node with all registers"""
-        config = self.single_cabinet_config
-        cabina = config['ip']
-        nodo = config['node']
-        port = config['port']
-        cabinet_name = config['name']
-        
-        # Set shorter timeout to avoid hanging
-        client = ModbusTcpClient(cabina, port=port, timeout=3)
-        
-        try:
-            print(f"Attempting detailed connection to {cabinet_name} ({cabina}:{port}, node {nodo})...")
-            
-            # Connect to the device with timeout handling
-            connection_result = client.connect()
-            if not connection_result:
-                print(f"WARNING Connection failed: {cabinet_name} at {cabina}:{port}")
-                return {
-                    'cabinet_name': cabinet_name,
-                    'connection_status': 'Connection Failed',
-                    'connection_info': {
-                        'ip_address': cabina,
-                        'port': port,
-                        'device_id': nodo
-                    },
-                    'readings': {},
-                    'error_details': f'Cannot connect to {cabina}:{port}'
-                }
-            
-            print(f"Connected to {cabinet_name}")
-            results = {}
-            failed_registers = []
-            
-            # Read each register with individual error handling
-            for registro, description in self.registers.items():
-                try:
-                    value = self.read_single_register(client, registro, nodo)
-                    if value is not None:
-                        results[registro] = {
-                            'value': round(value, 2),
-                            'description': description,
-                            'unit': self._get_unit_for_register(registro)
-                        }
-                        print(f"  Register {registro}: {value:.2f}")
-                    else:
-                        failed_registers.append(registro)
-                        print(f"  Register {registro}: No data")
-                except Exception as reg_error:
-                    failed_registers.append(registro)
-                    print(f"  Register {registro}: Error - {reg_error}")
-            
-            # Determine connection status based on successful reads
-            if len(results) == len(self.registers):
-                status = 'Connected'
-            elif len(results) > 0:
-                status = f'Partial ({len(results)}/{len(self.registers)} registers)'
-            else:
-                status = 'No Data'
-            
-            return {
-                'cabinet_name': cabinet_name,
-                'connection_status': status,
-                'connection_info': {
-                    'ip_address': cabina,
-                    'port': port,
-                    'device_id': nodo
-                },
-                'readings': results,
-                'failed_registers': failed_registers,
-                'registers_read': f"{len(results)}/{len(self.registers)}"
-            }
-            
-        except ConnectionException as conn_error:
-            print(f"Connection error for {cabinet_name}: {conn_error}")
-            return {
-                'cabinet_name': cabinet_name,
-                'connection_status': 'Connection Error',
-                'connection_info': {
-                    'ip_address': cabina,
-                    'port': port,
-                    'device_id': nodo
-                },
-                'readings': {},
-                'error_details': f'Connection error: {str(conn_error)}'
-            }
-        except Exception as e:
-            print(f"Unexpected error reading {cabinet_name}: {e}")
-            return {
-                'cabinet_name': cabinet_name,
-                'connection_status': f'Error: {type(e).__name__}',
-                'connection_info': {
-                    'ip_address': cabina,
-                    'port': port,
-                    'device_id': nodo
-                },
-                'readings': {},
-                'error_details': f'Unexpected error: {str(e)}'
-            }
-            
-        finally:
-            try:
-                client.close()
-                print(f"Connection closed for {cabinet_name}")
-            except Exception as close_error:
-                print(f"Error closing connection for {cabinet_name}: {close_error}")
-
-    def _get_unit_for_register(self, register):
-        """Get the appropriate unit for a register"""
-        if register in [358, 360, 362, 364, 366, 368]:  # Voltage
-            return "V"
-        elif register in [374, 376, 378, 380]:  # Current
-            return "A"
-        elif register in [390, 392, 394, 396]:  # Active Power
-            return "W"
-        elif register in [398, 400, 402, 404]:  # Reactive Power
-            return "VAr"
-        elif register in [406, 408, 410, 412]:  # Apparent Power
-            return "VA"
-        elif register in [414, 416, 418, 420]:  # Power Factor
-            return ""
-        elif register == 422:  # Frequency
-            return "Hz"
-        elif register in [424, 426]:  # Active Energy
-            return "Wh"
-        elif register in [428, 430]:  # Reactive Energy
-            return "VArh"
-        else:
-            return ""
+    def read_single_meter(self, meter_config):
         """Read all registers from a single energy meter with resilience"""
         cabina = meter_config['cabina']
         nodo = meter_config['nodo']
@@ -393,59 +220,80 @@ class EnergyMeterReader:
                 print(f"Error closing connection for {meter_name}: {close_error}")
 
     def read_all_registers(self):
-        """Read detailed registers from single cabinet for first tab"""
+        """Read all energy meter registers from all configured meters with resilience"""
         global latest_readings, last_update_time, connection_status, historical_data
         
-        print(f"Reading detailed data from single cabinet...")
+        all_results = {}
+        successful_connections = 0
+        partial_connections = 0
         
-        # Read detailed data from single cabinet
-        cabinet_result = self.read_single_cabinet_detailed()
+        print(f"Reading from {len(self.energy_meters)} energy meters...")
+        
+        for meter_config in self.energy_meters:
+            print(f"Processing {meter_config['name']}...")
+            meter_result = self.read_single_meter(meter_config)
+            all_results[meter_result['meter_id']] = meter_result
+            
+            # Count connection types for overall status
+            status = meter_result['connection_status']
+            if status == 'Connected':
+                successful_connections += 1
+            elif 'Partial' in status:
+                partial_connections += 1
+                print(f"WARNING {meter_config['name']}: Partial connection - {status}")
+            else:
+                print(f"ERROR {meter_config['name']}: Connection failed - {status}")
         
         # Update global variables
-        latest_readings = {'single_cabinet': cabinet_result}
+        latest_readings = all_results
         current_time = datetime.now()
         last_update_time = current_time
         
-        # Update connection status
-        status = cabinet_result['connection_status']
-        if status == 'Connected':
-            connection_status = "Connected"
-        elif 'Partial' in status:
-            connection_status = f"WARNING Partial connection - {status}"
+        # Update overall connection status
+        total_meters = len(self.energy_meters)
+        if successful_connections == total_meters:
+            connection_status = "All Connected"
+        elif successful_connections + partial_connections == total_meters:
+            connection_status = f"WARNING {successful_connections} Connected, {partial_connections} Partial"
+        elif successful_connections > 0:
+            failed_connections = total_meters - successful_connections - partial_connections
+            connection_status = f"MIXED {successful_connections} Connected, {partial_connections} Partial, {failed_connections} Failed"
         else:
-            connection_status = f"ERROR Connection failed - {status}"
+            connection_status = "All Disconnected"
         
         # Store historical data for graphs (keep last 50 readings)
-        if cabinet_result and cabinet_result.get('readings'):
+        # Only store data from meters that have at least some readings
+        if all_results:
             data_point = {
                 'timestamp': current_time.isoformat()
             }
             
-            readings = cabinet_result.get('readings', {})
-            if readings:  # Only add data if we have readings
-                data_point['single_cabinet'] = {
-                    'voltage_l1': readings.get(358, {}).get('value', 0),
-                    'voltage_l2': readings.get(360, {}).get('value', 0),
-                    'voltage_l3': readings.get(362, {}).get('value', 0),
-                    'current_l1': readings.get(374, {}).get('value', 0),
-                    'current_l2': readings.get(376, {}).get('value', 0),
-                    'current_l3': readings.get(378, {}).get('value', 0),
-                    'power_active': readings.get(390, {}).get('value', 0),
-                    'power_reactive': readings.get(398, {}).get('value', 0),
-                    'power_apparent': readings.get(406, {}).get('value', 0),
-                    'frequency': readings.get(422, {}).get('value', 0)
-                }
-                
+            # Add data for each meter that has readings
+            for meter_id, meter_data in all_results.items():
+                readings = meter_data.get('readings', {})
+                if readings:  # Only add data if we have readings
+                    data_point[meter_id] = {
+                        'voltage': readings.get(358, {}).get('value', 0),
+                        'current_l1': readings.get(374, {}).get('value', 0),
+                        'current_l2': readings.get(376, {}).get('value', 0),
+                        'current_l3': readings.get(378, {}).get('value', 0),
+                        'power': readings.get(390, {}).get('value', 0)
+                    }
+            
+            # Only store historical point if we have at least one meter with data
+            if any(meter_id in data_point for meter_id in all_results.keys() if meter_id != 'timestamp'):
                 historical_data.append(data_point)
                 
                 # Keep only last 50 readings (about 4 minutes of data)
                 if len(historical_data) > 50:
                     historical_data = historical_data[-50:]
         
-        print(f"Single cabinet update completed at {last_update_time.strftime('%H:%M:%S')}")
+        successful_readings = successful_connections + partial_connections
+        print(f"Summary: {successful_connections} fully connected, {partial_connections} partial, {total_meters - successful_readings} failed")
+        print(f"Update completed at {last_update_time.strftime('%H:%M:%S')}")
         
-        # Return True if we have data
-        return len(cabinet_result.get('readings', {})) > 0
+        # Return True if we have at least some data (even partial)
+        return successful_readings > 0
 
     def read_all_cabinet_data(self):
         """
@@ -652,76 +500,6 @@ def api_cabinet_data():
             'error': str(e),
             'timestamp': datetime.now().isoformat()
         }), 500
-
-@app.route('/api/cabinet-selection', methods=['GET', 'POST'])
-def api_cabinet_selection():
-    """API endpoint to get or update cabinet selection for detailed view"""
-    global meter_reader, historical_data
-    
-    if request.method == 'POST':
-        try:
-            data = request.get_json()
-            
-            # Available cabinets
-            available_cabinets = [
-                {'name': 'Cabinet 1', 'ip': '192.168.156.75'},
-                {'name': 'Cabinet 2', 'ip': '192.168.156.76'},
-                {'name': 'Cabinet 3', 'ip': '192.168.156.77'}
-            ]
-            
-            # Update cabinet selection
-            if 'cabinet_name' in data and 'node' in data:
-                # Find the cabinet by name
-                selected_cabinet = None
-                for cabinet in available_cabinets:
-                    if cabinet['name'] == data['cabinet_name']:
-                        selected_cabinet = cabinet
-                        break
-                
-                if selected_cabinet:
-                    meter_reader.single_cabinet_config = {
-                        'name': data['cabinet_name'],
-                        'ip': selected_cabinet['ip'],
-                        'node': int(data['node']),
-                        'port': 502
-                    }
-                    
-                    # Clear historical data when configuration changes
-                    historical_data.clear()
-                    
-                    return jsonify({
-                        'success': True,
-                        'message': f'Cabinet selection updated to {data["cabinet_name"]} Node {data["node"]}',
-                        'config': meter_reader.single_cabinet_config
-                    })
-                else:
-                    return jsonify({
-                        'success': False,
-                        'message': f'Cabinet {data["cabinet_name"]} not found'
-                    }), 400
-            else:
-                return jsonify({
-                    'success': False,
-                    'message': 'Missing cabinet_name or node parameter'
-                }), 400
-            
-        except Exception as e:
-            return jsonify({
-                'success': False,
-                'message': f'Error updating cabinet selection: {str(e)}'
-            }), 400
-    
-    else:  # GET request
-        available_cabinets = [
-            {'name': 'Cabinet 1', 'ip': '192.168.156.75', 'max_nodes': 26},
-            {'name': 'Cabinet 2', 'ip': '192.168.156.76', 'max_nodes': 21},
-            {'name': 'Cabinet 3', 'ip': '192.168.156.77', 'max_nodes': 15}
-        ]
-        
-        return jsonify({
-            'current_config': meter_reader.single_cabinet_config,
-            'available_cabinets': available_cabinets
-        })
 
 @app.route('/api/config', methods=['GET', 'POST'])
 def api_config():
@@ -976,79 +754,6 @@ if __name__ == '__main__':
         .controls {
             margin-bottom: 20px;
             text-align: center;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 15px;
-            flex-wrap: wrap;
-        }
-        
-        .controls label {
-            font-weight: 600;
-            color: #495057;
-        }
-        
-        .controls select {
-            padding: 8px 12px;
-            border: 1px solid #ced4da;
-            border-radius: 5px;
-            font-size: 14px;
-            background: white;
-            color: #495057;
-        }
-        
-        /* Readings grid for detailed view */
-        .readings-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-        
-        .reading-group {
-            background: #f8f9fa;
-            border-radius: 10px;
-            padding: 20px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        }
-        
-        .reading-group h3 {
-            color: #667eea;
-            margin: 0 0 15px 0;
-            font-size: 1.2em;
-            border-bottom: 2px solid #667eea;
-            padding-bottom: 5px;
-        }
-        
-        .reading-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin: 10px 0;
-            padding: 8px 0;
-            border-bottom: 1px solid #e9ecef;
-        }
-        
-        .reading-item:last-child {
-            border-bottom: none;
-        }
-        
-        .reading-label {
-            font-weight: 500;
-            color: #495057;
-            flex: 1;
-        }
-        
-        .reading-value {
-            font-weight: bold;
-            color: #667eea;
-            font-size: 1.1em;
-        }
-        
-        .reading-unit {
-            color: #6c757d;
-            margin-left: 5px;
-            font-size: 0.9em;
         }
         
         .btn {
@@ -1116,34 +821,18 @@ if __name__ == '__main__':
         
         <!-- Tab Navigation -->
         <div class="tabs">
-            <button class="tab active" onclick="switchTab('individual')">⚡ Detailed Meter View</button>
+            <button class="tab active" onclick="switchTab('individual')">📊 Individual Meters</button>
             <button class="tab" onclick="switchTab('cabinet')">🏗️ All Cabinets</button>
         </div>
         
         <!-- Individual Meters Tab -->
         <div id="individual-tab" class="tab-content active">
-            <!-- Cabinet Selection Controls -->
-            <div class="controls">
-                <label for="cabinetSelect">Select Cabinet:</label>
-                <select id="cabinetSelect" onchange="updateCabinetSelection()">
-                    <option value="">Loading cabinets...</option>
-                </select>
-                
-                <label for="nodeSelect">Select Node:</label>
-                <select id="nodeSelect" onchange="updateCabinetSelection()">
-                    <option value="1">1</option>
-                </select>
-                
-                <button class="btn" onclick="refreshDetailedData()" id="refreshDetailedBtn">🔄 Refresh Data</button>
-            </div>
-            
             <div id="status" class="status">
                 <div class="loading">Loading...</div>
             </div>
             
-            <!-- Detailed readings display -->
-            <div id="detailed-readings-container">
-                <div class="loading">Fetching detailed energy meter data...</div>
+            <div id="readings-container">
+                <div class="loading">Fetching energy meter data...</div>
             </div>
         </div>
         
@@ -1195,225 +884,66 @@ if __name__ == '__main__':
                 .then(response => response.json())
                 .then(data => {
                     currentData = data;
-                    displayDetailedReadings(data);
+                    displayReadings(data);
                     updateConnectionInfo(data);
                     updateLastUpdate(data.last_update);
                 })
                 .catch(error => {
                     console.error('Error fetching readings:', error);
-                    document.getElementById('detailed-readings-container').innerHTML = 
+                    document.getElementById('readings-container').innerHTML = 
                         '<div class="error-message">Error fetching readings: ' + error.message + '</div>';
                 });
         }
         
-        function displayDetailedReadings(data) {
-            if (!data.readings || !data.readings.single_cabinet) {
-                document.getElementById('detailed-readings-container').innerHTML = 
+        function displayReadings(data) {
+            if (!data.readings || Object.keys(data.readings).length === 0) {
+                document.getElementById('readings-container').innerHTML = 
                     '<div class="loading">No energy meter data available</div>';
                 return;
             }
             
-            const cabinet = data.readings.single_cabinet;
-            const cabinetName = cabinet.cabinet_name || 'Unknown Cabinet';
-            const connectionStatus = cabinet.connection_status || 'Unknown';
-            const readings = cabinet.readings || {};
+            let html = '<div class="grid">';
             
-            // Status indicator
-            let statusClass = 'status-error';
-            let statusIcon = '❌';
-            if (connectionStatus === 'Connected') {
-                statusClass = 'status-ok';
-                statusIcon = '✅';
-            } else if (connectionStatus.includes('Partial')) {
-                statusClass = 'status-warning';
-                statusIcon = '⚠️';
-            }
-            
-            // Group readings by category
-            const groupedReadings = {
-                'Voltages': {},
-                'Currents': {},
-                'Active Power': {},
-                'Reactive Power': {},
-                'Apparent Power': {},
-                'Power Factor': {},
-                'Frequency & Energy': {}
-            };
-            
-            // Categorize readings
-            Object.keys(readings).forEach(regKey => {
-                const reg = parseInt(regKey);
-                const reading = readings[regKey];
+            // Process each meter
+            Object.keys(data.readings).forEach(meterId => {
+                const meter = data.readings[meterId];
+                const meterName = meter.meter_name || meterId;
+                const connectionStatus = meter.connection_status || 'Unknown';
+                const readings = meter.readings || {};
                 
-                if (reg >= 358 && reg <= 368) {
-                    groupedReadings['Voltages'][regKey] = reading;
-                } else if (reg >= 374 && reg <= 380) {
-                    groupedReadings['Currents'][regKey] = reading;
-                } else if (reg >= 390 && reg <= 396) {
-                    groupedReadings['Active Power'][regKey] = reading;
-                } else if (reg >= 398 && reg <= 404) {
-                    groupedReadings['Reactive Power'][regKey] = reading;
-                } else if (reg >= 406 && reg <= 412) {
-                    groupedReadings['Apparent Power'][regKey] = reading;
-                } else if (reg >= 414 && reg <= 420) {
-                    groupedReadings['Power Factor'][regKey] = reading;
-                } else {
-                    groupedReadings['Frequency & Energy'][regKey] = reading;
+                // Status indicator
+                let statusClass = 'status-error';
+                let statusIcon = '❌';
+                if (connectionStatus === 'Connected') {
+                    statusClass = 'status-ok';
+                    statusIcon = '✅';
+                } else if (connectionStatus.includes('Partial')) {
+                    statusClass = 'status-warning';
+                    statusIcon = '⚠️';
                 }
-            });
-            
-            let html = `
-                <div style="text-align: center; margin-bottom: 20px;">
-                    <h2>${cabinetName} - Node ${cabinet.connection_info ? cabinet.connection_info.device_id : 'N/A'}</h2>
-                    <div class="${statusClass}" style="font-size: 1.2em; margin: 10px 0;">
-                        ${statusIcon} ${connectionStatus}
-                    </div>
-                    <div style="color: #6c757d;">
-                        ${cabinet.connection_info ? cabinet.connection_info.ip_address + ':' + cabinet.connection_info.port : ''}
-                    </div>
-                </div>
                 
-                <div class="readings-grid">
-            `;
-            
-            // Display each group
-            Object.keys(groupedReadings).forEach(groupName => {
-                const groupReadings = groupedReadings[groupName];
-                if (Object.keys(groupReadings).length > 0) {
-                    html += `
-                        <div class="reading-group">
-                            <h3>${groupName}</h3>
-                    `;
-                    
-                    Object.keys(groupReadings).forEach(regKey => {
-                        const reading = groupReadings[regKey];
-                        const label = reading.description.split('(')[0].trim();
-                        html += `
-                            <div class="reading-item">
-                                <div class="reading-label">${label}</div>
-                                <div>
-                                    <span class="reading-value">${reading.value.toFixed(2)}</span>
-                                    <span class="reading-unit">${reading.unit}</span>
-                                </div>
-                            </div>
-                        `;
-                    });
-                    
-                    html += '</div>';
-                }
+                html += `
+                    <div class="card">
+                        <h3>${meterName}</h3>
+                        <div class="${statusClass}">${statusIcon} ${connectionStatus}</div>
+                        <div style="margin-top: 10px; font-size: 0.8em; color: #6c757d;">
+                            ${meter.connection_info ? meter.connection_info.ip_address + ':' + meter.connection_info.port + ' (Node ' + meter.connection_info.device_id + ')' : ''}
+                        </div>
+                        <div style="margin-top: 10px;">
+                            ${Object.keys(readings).length > 0 ? 
+                                Object.keys(readings).map(regKey => {
+                                    const reading = readings[regKey];
+                                    return `<div style="margin: 5px 0;"><strong>${reading.description.split('(')[0]}</strong><br>${reading.value.toFixed(2)} ${regKey == 358 ? 'V' : regKey == 390 ? 'W' : 'A'}</div>`;
+                                }).join('')
+                                : '<div style="color: #dc3545;">No data available</div>'
+                            }
+                        </div>
+                    </div>
+                `;
             });
             
             html += '</div>';
-            
-            if (Object.keys(readings).length === 0) {
-                html += '<div style="color: #dc3545; text-align: center; margin-top: 20px;">No data available from this cabinet/node</div>';
-            }
-            
-            document.getElementById('detailed-readings-container').innerHTML = html;
-        }
-        
-        function loadCabinetSelection() {
-            fetch('/api/cabinet-selection')
-                .then(response => response.json())
-                .then(data => {
-                    const cabinetSelect = document.getElementById('cabinetSelect');
-                    const nodeSelect = document.getElementById('nodeSelect');
-                    
-                    // Populate cabinet dropdown
-                    cabinetSelect.innerHTML = '';
-                    data.available_cabinets.forEach(cabinet => {
-                        const option = document.createElement('option');
-                        option.value = cabinet.name;
-                        option.textContent = `${cabinet.name} (${cabinet.ip})`;
-                        option.dataset.maxNodes = cabinet.max_nodes;
-                        cabinetSelect.appendChild(option);
-                    });
-                    
-                    // Set current selection
-                    if (data.current_config) {
-                        cabinetSelect.value = data.current_config.name;
-                        nodeSelect.value = data.current_config.node;
-                    }
-                    
-                    // Update node options
-                    updateNodeOptions();
-                })
-                .catch(error => {
-                    console.error('Error loading cabinet selection:', error);
-                });
-        }
-        
-        function updateNodeOptions() {
-            const cabinetSelect = document.getElementById('cabinetSelect');
-            const nodeSelect = document.getElementById('nodeSelect');
-            const selectedOption = cabinetSelect.selectedOptions[0];
-            
-            if (selectedOption) {
-                const maxNodes = parseInt(selectedOption.dataset.maxNodes) || 26;
-                const currentValue = nodeSelect.value;
-                
-                nodeSelect.innerHTML = '';
-                for (let i = 1; i <= maxNodes; i++) {
-                    const option = document.createElement('option');
-                    option.value = i;
-                    option.textContent = i;
-                    nodeSelect.appendChild(option);
-                }
-                
-                // Restore selection if valid
-                if (currentValue && currentValue <= maxNodes) {
-                    nodeSelect.value = currentValue;
-                }
-            }
-        }
-        
-        function updateCabinetSelection() {
-            const cabinetSelect = document.getElementById('cabinetSelect');
-            const nodeSelect = document.getElementById('nodeSelect');
-            
-            if (cabinetSelect.value && nodeSelect.value) {
-                // Update node options first
-                updateNodeOptions();
-                
-                const config = {
-                    cabinet_name: cabinetSelect.value,
-                    node: parseInt(nodeSelect.value)
-                };
-                
-                fetch('/api/cabinet-selection', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(config)
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        console.log('Cabinet selection updated:', data.message);
-                        // Refresh data immediately
-                        setTimeout(updateReadings, 500);
-                    } else {
-                        console.error('Error updating cabinet selection:', data.message);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error updating cabinet selection:', error);
-                });
-            }
-        }
-        
-        function refreshDetailedData() {
-            const refreshBtn = document.getElementById('refreshDetailedBtn');
-            refreshBtn.disabled = true;
-            refreshBtn.textContent = '🔄 Refreshing...';
-            
-            updateReadings();
-            
-            setTimeout(() => {
-                refreshBtn.disabled = false;
-                refreshBtn.textContent = '🔄 Refresh Data';
-            }, 2000);
+            document.getElementById('readings-container').innerHTML = html;
         }
         
         function updateConnectionInfo(data) {
@@ -1586,7 +1116,6 @@ if __name__ == '__main__':
         
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
-            loadCabinetSelection();
             updateReadings();
             
             // Update individual readings every 5 seconds

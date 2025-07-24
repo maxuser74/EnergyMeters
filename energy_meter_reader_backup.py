@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """
-Energy Meter Reader Script - Utility-Based Monitoring with Unit Conversion
+Energy Meter Reader Script - Utility-Based Monitoring
 Reads specific registers from monitored utilities defined in Excel files:
 - Utenze.xlsx: Contains the specific utilities to monitor (Cabinet, Node, Utility name)
-- registri.xlsx: Contains the registers to read with length information and unit conversion
-  Columns: Registro (end address), Lettura (description), Lenght (data type), 
-           Readings (source unit), Convert to (target unit)
+- registri.xlsx: Contains the registers to read for each utility
 """
 
 from pymodbus.constants import Endian
@@ -14,7 +12,6 @@ import time
 from datetime import datetime
 import os
 import csv
-import struct
 
 # Try to import pandas for Excel export, but make it optional
 try:
@@ -64,136 +61,17 @@ def load_utilities_from_excel():
         print(f"ERROR loading utilities from Utenze.xlsx: {e}")
         return []
 
-def show_registers_configuration():
-    """Display the registers that will be read from registri.xlsx"""
-    try:
-        print("=" * 80)
-        print("📋 REGISTER CONFIGURATION FROM registri.xlsx")
-        print("=" * 80)
-        
-        df_registri = pd.read_excel('registri.xlsx')
-        
-        # Filter registers that should be reported
-        df_reporting = df_registri[df_registri['Report'].str.strip().str.lower().isin(['yes', 'y', '1', 'true'])]
-        df_skipped = df_registri[~df_registri['Report'].str.strip().str.lower().isin(['yes', 'y', '1', 'true'])]
-        
-        print(f"Total registers in file: {len(df_registri)}")
-        print(f"Registers enabled for reporting: {len(df_reporting)}")
-        print(f"Registers disabled (Report=No): {len(df_skipped)}")
-        print()
-        
-        if len(df_skipped) > 0:
-            print("🚫 DISABLED REGISTERS (Report=No):")
-            for i, row in df_skipped.iterrows():
-                description = str(row['Lettura'])
-                report_status = str(row['Report'])
-                print(f"   - {description} (Report: {report_status})")
-            print()
-        
-        print("✅ ENABLED REGISTERS (Report=Yes):")
-        for i, row in df_reporting.iterrows():
-            end_address = int(row['Registro'])
-            description = str(row['Lettura'])
-            data_type = str(row['Lenght'])
-            source_unit = str(row['Readings']) if 'Readings' in row else 'N/A'
-            target_unit = str(row['Convert to']) if 'Convert to' in row else 'N/A'
-            report_status = str(row['Report'])
-            
-            # Calculate register count and start address based on data type
-            if data_type.lower() == 'float':
-                register_count = 2
-                start_address = end_address - 1
-            elif 'long long' in data_type.lower():
-                register_count = 4
-                start_address = end_address - 3
-            else:
-                register_count = 2
-                start_address = end_address - 1
-            
-            print(f"📊 Register: {description}")
-            print(f"   📍 Address: {start_address}-{end_address} ({register_count} registers)")
-            print(f"   🔧 Data Type: {data_type}")
-            print(f"   📏 Units: {source_unit} → {target_unit}")
-            print(f"   📋 Report Status: {report_status}")
-            
-            if source_unit != target_unit:
-                print(f"   🔄 Conversion: YES ({source_unit} will be converted to {target_unit})")
-            else:
-                print(f"   ✅ Conversion: NO (same units)")
-            print()
-        
-        print("=" * 80)
-        print()
-        
-    except FileNotFoundError:
-        print("❌ ERROR: registri.xlsx file not found!")
-        print("   Please ensure the file exists in the current directory.")
-        print()
-    except Exception as e:
-        print(f"❌ ERROR reading registri.xlsx: {e}")
-        print()
-
-def show_utilities_configuration():
-    """Display the utilities that will be monitored from Utenze.xlsx"""
-    try:
-        print("=" * 80)
-        print("🏭 UTILITY CONFIGURATION FROM Utenze.xlsx")
-        print("=" * 80)
-        
-        df_utenze = pd.read_excel('Utenze.xlsx')
-        
-        # Cabinet IP mapping
-        cabinet_ips = {
-            1: '192.168.156.75',
-            2: '192.168.156.76', 
-            3: '192.168.156.77'
-        }
-        
-        print(f"Total utilities to monitor: {len(df_utenze)}")
-        print()
-        
-        for i, row in df_utenze.iterrows():
-            cabinet = int(row['Cabinet'])
-            node = int(row['Nodo'])
-            utility_name = str(row['Utenza'])
-            ip_address = cabinet_ips.get(cabinet, 'UNKNOWN')
-            
-            print(f"🏢 Utility {i+1}: {utility_name}")
-            print(f"   📍 Location: Cabinet {cabinet}, Node {node}")
-            print(f"   🌐 IP Address: {ip_address}")
-            print(f"   🔌 Port: 502")
-            print()
-        
-        print("=" * 80)
-        print()
-        
-    except FileNotFoundError:
-        print("❌ ERROR: Utenze.xlsx file not found!")
-        print("   Please ensure the file exists in the current directory.")
-        print()
-    except Exception as e:
-        print(f"❌ ERROR reading Utenze.xlsx: {e}")
-        print()
-
 def load_registers_from_excel():
-    """Load register configuration from registri.xlsx with proper address calculation and unit conversion"""
+    """Load register configuration from registri.xlsx with proper address calculation"""
     try:
         df_registri = pd.read_excel('registri.xlsx')
         registers = {}
         
         print("Analyzing registers from registri.xlsx:")
         for _, row in df_registri.iterrows():
-            # Check if this register should be reported
-            report_status = str(row['Report']).strip().lower() if 'Report' in row else 'yes'
-            if report_status not in ['yes', 'y', '1', 'true']:
-                print(f"  Skipping register (Report={row['Report']}): {row['Lettura']}")
-                continue
-                
             end_address = int(row['Registro'])
             description = str(row['Lettura'])
             data_type = str(row['Lenght'])
-            source_unit = str(row['Readings']) if 'Readings' in row else ''
-            target_unit = str(row['Convert to']) if 'Convert to' in row else source_unit
             
             # Calculate register count and start address based on data type
             if data_type.lower() == 'float':
@@ -210,21 +88,18 @@ def load_registers_from_excel():
                 start_address = end_address - 1
                 print(f"  WARNING: Unknown data type '{data_type}', assuming float")
             
-            # Store register info with calculated start address and unit information
+            # Store register info with calculated start address
             registers[start_address] = {
                 'description': description,
                 'data_type': data_type,
                 'register_count': register_count,
                 'start_address': start_address,
-                'end_address': end_address,
-                'source_unit': source_unit,
-                'target_unit': target_unit
+                'end_address': end_address
             }
             
             print(f"  Register: {description}")
             print(f"    Address range: {start_address} to {end_address} ({register_count} registers)")
             print(f"    Data type: {data_type}")
-            print(f"    Units: {source_unit} → {target_unit}")
         
         print(f"Loaded {len(registers)} registers from registri.xlsx")
         return registers
@@ -232,78 +107,18 @@ def load_registers_from_excel():
     except FileNotFoundError:
         print("ERROR: registri.xlsx file not found!")
         # Fallback with old format
-        return {374: {'description': "Current L1 (A)", 'data_type': 'float', 'register_count': 2, 'start_address': 374, 'end_address': 375, 'source_unit': 'A', 'target_unit': 'A'}}
+        return {374: {'description': "Current L1 (A)", 'data_type': 'float', 'register_count': 2, 'start_address': 374, 'end_address': 375}}
     except Exception as e:
         print(f"ERROR loading registers from registri.xlsx: {e}")
         # Fallback with old format
-        return {374: {'description': "Current L1 (A)", 'data_type': 'float', 'register_count': 2, 'start_address': 374, 'end_address': 375, 'source_unit': 'A', 'target_unit': 'A'}}
-
-def convert_units(value, source_unit, target_unit):
-    """Convert value from source unit to target unit"""
-    if value is None:
-        return None
-    
-    # Normalize unit names (remove spaces, convert to lowercase for comparison)
-    source = source_unit.lower().replace(' ', '').replace('_', '')
-    target = target_unit.lower().replace(' ', '').replace('_', '')
-    
-    # If source and target are the same, no conversion needed
-    if source == target:
-        return value
-    
-    # Define conversion rules
-    conversions = {
-        # Energy conversions
-        ('tenthofwatts', 'kwh'): lambda x: x / 10000.0,  # Tenth of watts to kWh (divide by 10 for watts, then by 3600*1000 for Wh to kWh, simplified to /10000)
-        ('w/10', 'kwh'): lambda x: x / 10000.0,  # Same as above
-        ('watts', 'kwh'): lambda x: x / 3600000.0,  # Watts to kWh 
-        ('wh', 'kwh'): lambda x: x / 1000.0,  # Wh to kWh
-        
-        # Power conversions
-        ('tenthofwatts', 'w'): lambda x: x / 10.0,  # Tenth of watts to watts
-        ('w/10', 'w'): lambda x: x / 10.0,  # Same as above
-        
-        # Current conversions (typically no conversion needed for A to A)
-        ('a', 'a'): lambda x: x,
-        
-        # Voltage conversions (typically no conversion needed for V to V)  
-        ('v', 'v'): lambda x: x,
-    }
-    
-    # Try to find a conversion
-    conversion_key = (source, target)
-    if conversion_key in conversions:
-        converted_value = conversions[conversion_key](value)
-        return round(converted_value, 3)  # Round to 3 decimal places for precision
-    else:
-        # Check for reverse conversion
-        reverse_key = (target, source)
-        if reverse_key in conversions:
-            # Apply inverse conversion
-            if reverse_key == ('kwh', 'tenthofwatts') or reverse_key == ('kwh', 'w/10'):
-                converted_value = value * 10000.0
-            elif reverse_key == ('kwh', 'watts'):
-                converted_value = value * 3600000.0
-            elif reverse_key == ('kwh', 'wh'):
-                converted_value = value * 1000.0
-            elif reverse_key == ('w', 'tenthofwatts') or reverse_key == ('w', 'w/10'):
-                converted_value = value * 10.0
-            else:
-                converted_value = value
-            return round(converted_value, 3)
-    
-    # If no conversion found, log warning and return original value
-    print(f"    WARNING: No conversion available from '{source_unit}' to '{target_unit}', using original value")
-    return value
+        return {374: {'description': "Current L1 (A)", 'data_type': 'float', 'register_count': 2, 'start_address': 374, 'end_address': 375}}
 
 def read_register_value(client, register_info, node_id):
-    """Read a register value based on its data type and length, then apply unit conversion"""
+    """Read a register value based on its data type and length"""
     start_address = register_info['start_address']
     register_count = register_info['register_count']
     data_type = register_info['data_type']
     description = register_info['description']
-    source_unit = register_info.get('source_unit', '')
-    target_unit = register_info.get('target_unit', source_unit)
     
     try:
         # Read the required number of registers
@@ -312,9 +127,7 @@ def read_register_value(client, register_info, node_id):
         if request.isError():
             return None
         
-        # Process based on data type to get raw value
-        raw_value = None
-        
+        # Process based on data type
         if data_type.lower() == 'float':
             # 32-bit float: 2 registers
             if len(request.registers) < 2:
@@ -324,7 +137,8 @@ def read_register_value(client, register_info, node_id):
             
             # Convert to 32-bit float: word order is little endian (low word first)
             packed_data = struct.pack('>HH', low_word, high_word)
-            raw_value = struct.unpack('>f', packed_data)[0]
+            value = struct.unpack('>f', packed_data)[0]
+            return round(value, 2)
             
         elif 'long long' in data_type.lower():
             # 64-bit signed long long: 4 registers
@@ -340,24 +154,24 @@ def read_register_value(client, register_info, node_id):
             
             # Pack as 64-bit signed integer
             packed_data = struct.pack('>HHHH', word4, word3, word2, word1)
-            raw_value = struct.unpack('>q', packed_data)[0]
+            value = struct.unpack('>q', packed_data)[0]
             
+            # Check if this is energy data that needs scaling (W/10)
+            if '(W/10)' in description or '/10' in description:
+                value = value / 10.0
+                return round(value, 1)
+            else:
+                return value
         else:
             # Unknown type, try as float
             if len(request.registers) >= 2:
                 high_word = request.registers[0]
                 low_word = request.registers[1]
                 packed_data = struct.pack('>HH', low_word, high_word)
-                raw_value = struct.unpack('>f', packed_data)[0]
+                value = struct.unpack('>f', packed_data)[0]
+                return round(value, 2)
             else:
                 return None
-        
-        # Apply unit conversion
-        if raw_value is not None:
-            converted_value = convert_units(raw_value, source_unit, target_unit)
-            return converted_value
-        else:
-            return None
                 
     except Exception as e:
         print(f"    ERROR reading register {start_address}: {e}")
@@ -366,7 +180,7 @@ def read_register_value(client, register_info, node_id):
 def read_energy_meter_registers():
     """
     Read energy meter registers from utilities defined in Utenze.xlsx
-    using registers defined in registri.xlsx with proper length handling
+    using registers defined in registri.xlsx
     Export data to Excel
     """
     # Load configuration from Excel files
@@ -389,21 +203,12 @@ def read_energy_meter_registers():
     
     # Print table header - dynamic based on registers
     header_parts = ["Utility", "Cabinet", "Node"]
-    for start_address, register_info in registers.items():
-        description = register_info['description']
-        target_unit = register_info.get('target_unit', '')
-        
-        # Create header with unit if available
-        if target_unit and target_unit.strip():
-            header_text = f"{description[:10]}({target_unit})"[:15]
-        else:
-            header_text = description[:15]
-            
-        header_parts.append(header_text)
+    for register, description in registers.items():
+        header_parts.append(description)
     header_parts.append("Status")
     
     # Print header
-    header_line = " | ".join([f"{part:>15}" for part in header_parts])
+    header_line = " | ".join([f"{part:>12}" for part in header_parts])
     print(header_line)
     print("-" * len(header_line))
     
@@ -423,12 +228,12 @@ def read_energy_meter_registers():
             connection_result = client.connect()
             if not connection_result:
                 # Connection failed - display error
-                row_parts = [utility_name[:15], f"Cabinet {cabinet_num}", f"Node {node_num}"]
+                row_parts = [utility_name[:12], f"Cabinet {cabinet_num}", f"Node {node_num}"]
                 for _ in registers:
                     row_parts.append("ERROR")
                 row_parts.append("CONN_FAIL")
                 
-                row_line = " | ".join([f"{part:>15}" for part in row_parts])
+                row_line = " | ".join([f"{part:>12}" for part in row_parts])
                 print(row_line)
                 
                 # Add error row to data
@@ -440,17 +245,8 @@ def read_energy_meter_registers():
                     'Status': 'CONNECTION_FAILED',
                     'Timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 }
-                for start_address, register_info in registers.items():
-                    description = register_info['description']
-                    target_unit = register_info.get('target_unit', '')
-                    
-                    # Create column name with target unit
-                    if target_unit and target_unit.strip():
-                        column_name = f"{description} ({target_unit})"
-                    else:
-                        column_name = description
-                    
-                    data_row[column_name] = 'ERROR'
+                for register, description in registers.items():
+                    data_row[description] = 'ERROR'
                 all_data.append(data_row)
                 continue
             
@@ -458,36 +254,109 @@ def read_energy_meter_registers():
             node_results = {}
             node_status = "OK"
             
-            # Read each register using the new function
-            for start_address, register_info in registers.items():
+def read_register_value(client, register_info, node_id):
+    """Read a register value based on its data type and length"""
+    start_address = register_info['start_address']
+    register_count = register_info['register_count']
+    data_type = register_info['data_type']
+    description = register_info['description']
+    
+    try:
+        # Read the required number of registers
+        request = client.read_holding_registers(address=start_address, count=register_count, slave=node_id)
+        
+        if request.isError():
+            return None
+        
+        # Process based on data type
+        if data_type.lower() == 'float':
+            # 32-bit float: 2 registers
+            if len(request.registers) < 2:
+                return None
+            high_word = request.registers[0]
+            low_word = request.registers[1]
+            
+            # Convert to 32-bit float: word order is little endian (low word first)
+            packed_data = struct.pack('>HH', low_word, high_word)
+            value = struct.unpack('>f', packed_data)[0]
+            return round(value, 2)
+            
+        elif 'long long' in data_type.lower():
+            # 64-bit signed long long: 4 registers
+            if len(request.registers) < 4:
+                return None
+            
+            # Combine 4 registers into 64-bit value
+            # Assuming little endian order: [low_word, high_word, higher_word, highest_word]
+            word1 = request.registers[0]
+            word2 = request.registers[1] 
+            word3 = request.registers[2]
+            word4 = request.registers[3]
+            
+            # Pack as 64-bit signed integer
+            packed_data = struct.pack('>HHHH', word4, word3, word2, word1)
+            value = struct.unpack('>q', packed_data)[0]
+            
+            # Check if this is energy data that needs scaling (W/10)
+            if '(W/10)' in description or '/10' in description:
+                value = value / 10.0
+                return round(value, 1)
+            else:
+                return value
+        else:
+            # Unknown type, try as float
+            if len(request.registers) >= 2:
+                high_word = request.registers[0]
+                low_word = request.registers[1]
+                packed_data = struct.pack('>HH', low_word, high_word)
+                value = struct.unpack('>f', packed_data)[0]
+                return round(value, 2)
+            else:
+                return None
+                
+    except Exception as e:
+        print(f"    ERROR reading register {start_address}: {e}")
+        return None
                 try:
-                    value = read_register_value(client, register_info, node_num)
-                    if value is not None:
-                        node_results[start_address] = value
-                    else:
-                        node_results[start_address] = None
+                    # Read 2 registers (32-bit float)
+                    request = client.read_holding_registers(address=registro, count=2, slave=node_num)
+                    
+                    if request.isError():
+                        node_results[registro] = None
                         node_status = "ERROR" if node_status == "OK" else node_status
+                        continue
+                        
+                    # Decode the 32-bit float value
+                    import struct
+                    
+                    high_word = request.registers[0]
+                    low_word = request.registers[1]
+                    
+                    # Convert to 32-bit float: word order is little endian (low word first)
+                    packed_data = struct.pack('>HH', low_word, high_word)
+                    valore = struct.unpack('>f', packed_data)[0]
+                    
+                    # Round to 2 decimal places
+                    valore = round(valore, 2)
+                    
+                    # Store result
+                    node_results[registro] = valore
                     
                 except Exception as e:
-                    node_results[start_address] = None
+                    node_results[registro] = None
                     node_status = "PARTIAL" if node_status == "OK" else "FAIL"
-                    print(f"    Exception reading {register_info['description']}: {e}")
             
             # Display results
-            row_parts = [utility_name[:15], f"Cabinet {cabinet_num}", f"Node {node_num}"]
-            for start_address, register_info in registers.items():
-                value = node_results.get(start_address)
+            row_parts = [utility_name[:12], f"Cabinet {cabinet_num}", f"Node {node_num}"]
+            for register, description in registers.items():
+                value = node_results.get(register)
                 if value is not None:
-                    # Format based on data type
-                    if 'long long' in register_info['data_type'].lower():
-                        row_parts.append(f"{value}")
-                    else:
-                        row_parts.append(f"{value:.2f}")
+                    row_parts.append(f"{value:.2f}")
                 else:
                     row_parts.append("N/A")
             row_parts.append(node_status)
             
-            row_line = " | ".join([f"{part:>15}" for part in row_parts])
+            row_line = " | ".join([f"{part:>12}" for part in row_parts])
             print(row_line)
             
             # Add to data collection for Excel
@@ -499,34 +368,19 @@ def read_energy_meter_registers():
                 'Status': node_status,
                 'Timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             }
-            for start_address, register_info in registers.items():
-                description = register_info['description']
-                target_unit = register_info.get('target_unit', '')
-                
-                # Create column name with target unit
-                if target_unit and target_unit.strip():
-                    column_name = f"{description} ({target_unit})"
-                else:
-                    column_name = description
-                
-                value = node_results.get(start_address)
-                if value is not None:
-                    if 'long long' in register_info['data_type'].lower():
-                        data_row[column_name] = value  # Keep as integer
-                    else:
-                        data_row[column_name] = round(value, 2)
-                else:
-                    data_row[column_name] = None
+            for register, description in registers.items():
+                value = node_results.get(register)
+                data_row[description] = round(value, 2) if value is not None else None
             all_data.append(data_row)
             
         except Exception as e:
             # Connection or other error
-            row_parts = [utility_name[:15], f"Cabinet {cabinet_num}", f"Node {node_num}"]
+            row_parts = [utility_name[:12], f"Cabinet {cabinet_num}", f"Node {node_num}"]
             for _ in registers:
                 row_parts.append("ERROR")
             row_parts.append("EXCEPTION")
             
-            row_line = " | ".join([f"{part:>15}" for part in row_parts])
+            row_line = " | ".join([f"{part:>12}" for part in row_parts])
             print(row_line)
             
             # Add error row to data
@@ -538,17 +392,8 @@ def read_energy_meter_registers():
                 'Status': f'EXCEPTION: {str(e)[:50]}',
                 'Timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             }
-            for start_address, register_info in registers.items():
-                description = register_info['description']
-                target_unit = register_info.get('target_unit', '')
-                
-                # Create column name with target unit
-                if target_unit and target_unit.strip():
-                    column_name = f"{description} ({target_unit})"
-                else:
-                    column_name = description
-                
-                data_row[column_name] = 'ERROR'
+            for register, description in registers.items():
+                data_row[description] = 'ERROR'
             all_data.append(data_row)
             
         finally:
@@ -606,27 +451,37 @@ def read_energy_meter_registers():
                 if PANDAS_AVAILABLE:
                     try:
                         df_success = pd.DataFrame(successful_readings)
-                        print(f"MEASUREMENT STATISTICS:")
-                        for start_address, register_info in registers.items():
-                            description = register_info['description']
-                            target_unit = register_info.get('target_unit', '')
-                            
-                            # Create column name with target unit
-                            if target_unit and target_unit.strip():
-                                column_name = f"{description} ({target_unit})"
-                            else:
-                                column_name = description
-                            
-                            if column_name in df_success.columns:
-                                df_success[column_name] = pd.to_numeric(df_success[column_name], errors='coerce')
-                                valid_values = df_success[column_name].dropna()
+                        numeric_columns = []
+                        for register, description in registers.items():
+                            if description in df_success.columns:
+                                df_success[description] = pd.to_numeric(df_success[description], errors='coerce')
+                                numeric_columns.append(description)
+                        
+                        if numeric_columns:
+                            print(f"MEASUREMENT STATISTICS:")
+                            for col in numeric_columns:
+                                valid_values = df_success[col].dropna()
                                 if len(valid_values) > 0:
-                                    print(f"   {column_name}:")
+                                    print(f"   {col}:")
                                     print(f"     Max: {valid_values.max():.2f}")
                                     print(f"     Avg: {valid_values.mean():.2f}")
                                     print(f"     Min: {valid_values.min():.2f}")
                     except:
                         print("   Could not calculate detailed statistics")
+                else:
+                    # Simple statistics without pandas
+                    print(f"SIMPLE STATISTICS:")
+                    for register, description in registers.items():
+                        values = []
+                        for row in successful_readings:
+                            if description in row and row[description] is not None and isinstance(row[description], (int, float)):
+                                values.append(row[description])
+                        
+                        if values:
+                            print(f"   {description}:")
+                            print(f"     Max: {max(values):.2f}")
+                            print(f"     Avg: {sum(values)/len(values):.2f}")
+                            print(f"     Min: {min(values):.2f}")
             
             if failed_readings:
                 print(f"FAILED UTILITIES:")
@@ -686,23 +541,12 @@ def continuous_monitoring(interval_seconds=5, max_readings=10):
         print(f"\nERROR in monitoring: {e}")
 
 if __name__ == "__main__":
-    print("Energy Meter Reader - Enhanced with Length-based Address Calculation and Unit Conversion")
-    print("======================================================================================")
+    print("Energy Meter Reader")
+    print("==================")
     print()
-    
-    # Show configuration at startup
-    print("🔍 READING CONFIGURATION FILES...")
-    print()
-    
-    # Show utilities configuration
-    show_utilities_configuration()
-    
-    # Show register configuration 
-    show_registers_configuration()
     
     # Single reading
-    print("🚀 STARTING ENERGY METER READING...")
-    print()
+    print("Performing single reading...")
     read_energy_meter_registers()
     
     # Ask user if they want continuous monitoring

@@ -199,6 +199,79 @@
         .controls {
             margin-bottom: 20px;
             text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .controls label {
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        .controls select {
+            padding: 8px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 5px;
+            font-size: 14px;
+            background: white;
+            color: #495057;
+        }
+        
+        /* Readings grid for detailed view */
+        .readings-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .reading-group {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        .reading-group h3 {
+            color: #667eea;
+            margin: 0 0 15px 0;
+            font-size: 1.2em;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 5px;
+        }
+        
+        .reading-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 10px 0;
+            padding: 8px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .reading-item:last-child {
+            border-bottom: none;
+        }
+        
+        .reading-label {
+            font-weight: 500;
+            color: #495057;
+            flex: 1;
+        }
+        
+        .reading-value {
+            font-weight: bold;
+            color: #667eea;
+            font-size: 1.1em;
+        }
+        
+        .reading-unit {
+            color: #6c757d;
+            margin-left: 5px;
+            font-size: 0.9em;
         }
         
         .btn {
@@ -266,18 +339,34 @@
         
         <!-- Tab Navigation -->
         <div class="tabs">
-            <button class="tab active" onclick="switchTab('individual')">📊 Individual Meters</button>
+            <button class="tab active" onclick="switchTab('individual')">⚡ Detailed Meter View</button>
             <button class="tab" onclick="switchTab('cabinet')">🏗️ All Cabinets</button>
         </div>
         
         <!-- Individual Meters Tab -->
         <div id="individual-tab" class="tab-content active">
+            <!-- Cabinet Selection Controls -->
+            <div class="controls">
+                <label for="cabinetSelect">Select Cabinet:</label>
+                <select id="cabinetSelect" onchange="updateCabinetSelection()">
+                    <option value="">Loading cabinets...</option>
+                </select>
+                
+                <label for="nodeSelect">Select Node:</label>
+                <select id="nodeSelect" onchange="updateCabinetSelection()">
+                    <option value="1">1</option>
+                </select>
+                
+                <button class="btn" onclick="refreshDetailedData()" id="refreshDetailedBtn">🔄 Refresh Data</button>
+            </div>
+            
             <div id="status" class="status">
                 <div class="loading">Loading...</div>
             </div>
             
-            <div id="readings-container">
-                <div class="loading">Fetching energy meter data...</div>
+            <!-- Detailed readings display -->
+            <div id="detailed-readings-container">
+                <div class="loading">Fetching detailed energy meter data...</div>
             </div>
         </div>
         
@@ -329,66 +418,225 @@
                 .then(response => response.json())
                 .then(data => {
                     currentData = data;
-                    displayReadings(data);
+                    displayDetailedReadings(data);
                     updateConnectionInfo(data);
                     updateLastUpdate(data.last_update);
                 })
                 .catch(error => {
                     console.error('Error fetching readings:', error);
-                    document.getElementById('readings-container').innerHTML = 
+                    document.getElementById('detailed-readings-container').innerHTML = 
                         '<div class="error-message">Error fetching readings: ' + error.message + '</div>';
                 });
         }
         
-        function displayReadings(data) {
-            if (!data.readings || Object.keys(data.readings).length === 0) {
-                document.getElementById('readings-container').innerHTML = 
+        function displayDetailedReadings(data) {
+            if (!data.readings || !data.readings.single_cabinet) {
+                document.getElementById('detailed-readings-container').innerHTML = 
                     '<div class="loading">No energy meter data available</div>';
                 return;
             }
             
-            let html = '<div class="grid">';
+            const cabinet = data.readings.single_cabinet;
+            const cabinetName = cabinet.cabinet_name || 'Unknown Cabinet';
+            const connectionStatus = cabinet.connection_status || 'Unknown';
+            const readings = cabinet.readings || {};
             
-            // Process each meter
-            Object.keys(data.readings).forEach(meterId => {
-                const meter = data.readings[meterId];
-                const meterName = meter.meter_name || meterId;
-                const connectionStatus = meter.connection_status || 'Unknown';
-                const readings = meter.readings || {};
+            // Status indicator
+            let statusClass = 'status-error';
+            let statusIcon = '❌';
+            if (connectionStatus === 'Connected') {
+                statusClass = 'status-ok';
+                statusIcon = '✅';
+            } else if (connectionStatus.includes('Partial')) {
+                statusClass = 'status-warning';
+                statusIcon = '⚠️';
+            }
+            
+            // Group readings by category
+            const groupedReadings = {
+                'Voltages': {},
+                'Currents': {},
+                'Active Power': {},
+                'Reactive Power': {},
+                'Apparent Power': {},
+                'Power Factor': {},
+                'Frequency & Energy': {}
+            };
+            
+            // Categorize readings
+            Object.keys(readings).forEach(regKey => {
+                const reg = parseInt(regKey);
+                const reading = readings[regKey];
                 
-                // Status indicator
-                let statusClass = 'status-error';
-                let statusIcon = '❌';
-                if (connectionStatus === 'Connected') {
-                    statusClass = 'status-ok';
-                    statusIcon = '✅';
-                } else if (connectionStatus.includes('Partial')) {
-                    statusClass = 'status-warning';
-                    statusIcon = '⚠️';
+                if (reg >= 358 && reg <= 368) {
+                    groupedReadings['Voltages'][regKey] = reading;
+                } else if (reg >= 374 && reg <= 380) {
+                    groupedReadings['Currents'][regKey] = reading;
+                } else if (reg >= 390 && reg <= 396) {
+                    groupedReadings['Active Power'][regKey] = reading;
+                } else if (reg >= 398 && reg <= 404) {
+                    groupedReadings['Reactive Power'][regKey] = reading;
+                } else if (reg >= 406 && reg <= 412) {
+                    groupedReadings['Apparent Power'][regKey] = reading;
+                } else if (reg >= 414 && reg <= 420) {
+                    groupedReadings['Power Factor'][regKey] = reading;
+                } else {
+                    groupedReadings['Frequency & Energy'][regKey] = reading;
                 }
-                
-                html += `
-                    <div class="card">
-                        <h3>${meterName}</h3>
-                        <div class="${statusClass}">${statusIcon} ${connectionStatus}</div>
-                        <div style="margin-top: 10px; font-size: 0.8em; color: #6c757d;">
-                            ${meter.connection_info ? meter.connection_info.ip_address + ':' + meter.connection_info.port + ' (Node ' + meter.connection_info.device_id + ')' : ''}
-                        </div>
-                        <div style="margin-top: 10px;">
-                            ${Object.keys(readings).length > 0 ? 
-                                Object.keys(readings).map(regKey => {
-                                    const reading = readings[regKey];
-                                    return `<div style="margin: 5px 0;"><strong>${reading.description.split('(')[0]}</strong><br>${reading.value.toFixed(2)} ${regKey == 358 ? 'V' : regKey == 390 ? 'W' : 'A'}</div>`;
-                                }).join('')
-                                : '<div style="color: #dc3545;">No data available</div>'
-                            }
-                        </div>
+            });
+            
+            let html = `
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <h2>${cabinetName} - Node ${cabinet.connection_info ? cabinet.connection_info.device_id : 'N/A'}</h2>
+                    <div class="${statusClass}" style="font-size: 1.2em; margin: 10px 0;">
+                        ${statusIcon} ${connectionStatus}
                     </div>
-                `;
+                    <div style="color: #6c757d;">
+                        ${cabinet.connection_info ? cabinet.connection_info.ip_address + ':' + cabinet.connection_info.port : ''}
+                    </div>
+                </div>
+                
+                <div class="readings-grid">
+            `;
+            
+            // Display each group
+            Object.keys(groupedReadings).forEach(groupName => {
+                const groupReadings = groupedReadings[groupName];
+                if (Object.keys(groupReadings).length > 0) {
+                    html += `
+                        <div class="reading-group">
+                            <h3>${groupName}</h3>
+                    `;
+                    
+                    Object.keys(groupReadings).forEach(regKey => {
+                        const reading = groupReadings[regKey];
+                        const label = reading.description.split('(')[0].trim();
+                        html += `
+                            <div class="reading-item">
+                                <div class="reading-label">${label}</div>
+                                <div>
+                                    <span class="reading-value">${reading.value.toFixed(2)}</span>
+                                    <span class="reading-unit">${reading.unit}</span>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    html += '</div>';
+                }
             });
             
             html += '</div>';
-            document.getElementById('readings-container').innerHTML = html;
+            
+            if (Object.keys(readings).length === 0) {
+                html += '<div style="color: #dc3545; text-align: center; margin-top: 20px;">No data available from this cabinet/node</div>';
+            }
+            
+            document.getElementById('detailed-readings-container').innerHTML = html;
+        }
+        
+        function loadCabinetSelection() {
+            fetch('/api/cabinet-selection')
+                .then(response => response.json())
+                .then(data => {
+                    const cabinetSelect = document.getElementById('cabinetSelect');
+                    const nodeSelect = document.getElementById('nodeSelect');
+                    
+                    // Populate cabinet dropdown
+                    cabinetSelect.innerHTML = '';
+                    data.available_cabinets.forEach(cabinet => {
+                        const option = document.createElement('option');
+                        option.value = cabinet.name;
+                        option.textContent = `${cabinet.name} (${cabinet.ip})`;
+                        option.dataset.maxNodes = cabinet.max_nodes;
+                        cabinetSelect.appendChild(option);
+                    });
+                    
+                    // Set current selection
+                    if (data.current_config) {
+                        cabinetSelect.value = data.current_config.name;
+                        nodeSelect.value = data.current_config.node;
+                    }
+                    
+                    // Update node options
+                    updateNodeOptions();
+                })
+                .catch(error => {
+                    console.error('Error loading cabinet selection:', error);
+                });
+        }
+        
+        function updateNodeOptions() {
+            const cabinetSelect = document.getElementById('cabinetSelect');
+            const nodeSelect = document.getElementById('nodeSelect');
+            const selectedOption = cabinetSelect.selectedOptions[0];
+            
+            if (selectedOption) {
+                const maxNodes = parseInt(selectedOption.dataset.maxNodes) || 26;
+                const currentValue = nodeSelect.value;
+                
+                nodeSelect.innerHTML = '';
+                for (let i = 1; i <= maxNodes; i++) {
+                    const option = document.createElement('option');
+                    option.value = i;
+                    option.textContent = i;
+                    nodeSelect.appendChild(option);
+                }
+                
+                // Restore selection if valid
+                if (currentValue && currentValue <= maxNodes) {
+                    nodeSelect.value = currentValue;
+                }
+            }
+        }
+        
+        function updateCabinetSelection() {
+            const cabinetSelect = document.getElementById('cabinetSelect');
+            const nodeSelect = document.getElementById('nodeSelect');
+            
+            if (cabinetSelect.value && nodeSelect.value) {
+                // Update node options first
+                updateNodeOptions();
+                
+                const config = {
+                    cabinet_name: cabinetSelect.value,
+                    node: parseInt(nodeSelect.value)
+                };
+                
+                fetch('/api/cabinet-selection', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(config)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        console.log('Cabinet selection updated:', data.message);
+                        // Refresh data immediately
+                        setTimeout(updateReadings, 500);
+                    } else {
+                        console.error('Error updating cabinet selection:', data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error updating cabinet selection:', error);
+                });
+            }
+        }
+        
+        function refreshDetailedData() {
+            const refreshBtn = document.getElementById('refreshDetailedBtn');
+            refreshBtn.disabled = true;
+            refreshBtn.textContent = '🔄 Refreshing...';
+            
+            updateReadings();
+            
+            setTimeout(() => {
+                refreshBtn.disabled = false;
+                refreshBtn.textContent = '🔄 Refresh Data';
+            }, 2000);
         }
         
         function updateConnectionInfo(data) {
@@ -561,6 +809,7 @@
         
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
+            loadCabinetSelection();
             updateReadings();
             
             // Update individual readings every 5 seconds
