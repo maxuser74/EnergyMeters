@@ -277,14 +277,16 @@ class ExcelBasedEnergyMeterReader:
                             'description': register_info['description'],
                             'value': round(value, 2) if isinstance(value, float) else value,
                             'unit': register_info.get('target_unit', ''),
-                            'status': 'OK'
+                            'status': 'OK',
+                            'category': register_info.get('category', 'other')
                         }
                     else:
                         utility_data['registers'][register_key] = {
                             'description': register_info['description'],
                             'value': 'N/A',
                             'unit': register_info.get('target_unit', ''),
-                            'status': 'ERROR'
+                            'status': 'ERROR',
+                            'category': register_info.get('category', 'other')
                         }
                         utility_data['status'] = 'PARTIAL'
                         
@@ -294,7 +296,8 @@ class ExcelBasedEnergyMeterReader:
                         'description': register_info['description'],
                         'value': 'ERROR',
                         'unit': register_info.get('target_unit', ''),
-                        'status': 'ERROR'
+                        'status': 'ERROR',
+                        'category': register_info.get('category', 'other')
                     }
                     utility_data['status'] = 'PARTIAL'
                     print(f"    Exception reading register {start_address}: {e}")
