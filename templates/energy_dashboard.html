@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Energy Meter Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         * {
             margin: 0;
@@ -198,6 +199,55 @@
             margin-top: 5px;
         }
 
+        .charts-container {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 15px;
+        }
+
+        .chart-section {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+        }
+
+        .chart-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            padding: 8px 12px;
+            border-radius: 5px;
+            text-align: center;
+            color: white;
+        }
+
+        .chart-title.voltage {
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+        }
+
+        .chart-title.current {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+        }
+
+        .chart-canvas {
+            height: 200px;
+        }
+
+        @media (max-width: 768px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
         .registers-container {
             padding: 20px;
         }
@@ -239,18 +289,27 @@
 
         .registers-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 12px;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 10px;
+        }
+
+        .registers-grid.voltage-grid, .registers-grid.current-grid {
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 8px;
         }
 
         .register-badge {
             background: white;
             border: 2px solid #e0e0e0;
-            padding: 12px;
+            padding: 10px;
             border-radius: 8px;
             text-align: center;
             transition: all 0.3s ease;
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .register-badge.voltage, .register-badge.current {
+            padding: 8px;
         }
 
         .register-badge:hover {
@@ -286,19 +345,30 @@
         .register-name {
             font-weight: 600;
             color: #2c3e50;
-            margin-bottom: 8px;
-            font-size: 0.8em;
-            line-height: 1.2;
-            min-height: 32px;
+            margin-bottom: 6px;
+            font-size: 0.7em;
+            line-height: 1.1;
+            min-height: 28px;
             display: flex;
             align-items: center;
             justify-content: center;
         }
 
-        .register-value {
-            font-size: 1.6em;
-            font-weight: bold;
+        .register-badge.voltage .register-name, .register-badge.current .register-name {
+            font-size: 0.65em;
+            min-height: 24px;
             margin-bottom: 4px;
+        }
+
+        .register-value {
+            font-size: 1.4em;
+            font-weight: bold;
+            margin-bottom: 3px;
+        }
+
+        .register-badge.voltage .register-value, .register-badge.current .register-value {
+            font-size: 1.2em;
+            margin-bottom: 2px;
         }
 
         .register-badge.voltage .register-value {
@@ -490,6 +560,199 @@
     <script>
         let isRefreshing = false;
         let monitoringIntervals = {}; // Store active monitoring intervals
+        let chartInstances = {}; // Store chart instances for each utility
+        let chartData = {}; // Store chart data history for each utility
+
+        // Chart configuration
+        const chartConfig = {
+            voltage: {
+                backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                borderColor: 'rgba(231, 76, 60, 1)',
+                pointBackgroundColor: 'rgba(231, 76, 60, 1)'
+            },
+            current: {
+                backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                borderColor: 'rgba(52, 152, 219, 1)',
+                pointBackgroundColor: 'rgba(52, 152, 219, 1)'
+            }
+        };
+
+        function initializeCharts(utilityId) {
+            // Initialize chart data storage for this utility
+            if (!chartData[utilityId]) {
+                chartData[utilityId] = {
+                    voltage: { labels: [], datasets: [] },
+                    current: { labels: [], datasets: [] }
+                };
+            }
+
+            // Initialize chart instances
+            if (!chartInstances[utilityId]) {
+                chartInstances[utilityId] = { voltage: null, current: null };
+            }
+
+            // Create voltage chart
+            const voltageCanvas = document.getElementById(`voltage-chart-${utilityId}`);
+            if (voltageCanvas && !chartInstances[utilityId].voltage) {
+                chartInstances[utilityId].voltage = new Chart(voltageCanvas, {
+                    type: 'line',
+                    data: chartData[utilityId].voltage,
+                    options: getChartOptions('Voltage (V)')
+                });
+            }
+
+            // Create current chart
+            const currentCanvas = document.getElementById(`current-chart-${utilityId}`);
+            if (currentCanvas && !chartInstances[utilityId].current) {
+                chartInstances[utilityId].current = new Chart(currentCanvas, {
+                    type: 'line',
+                    data: chartData[utilityId].current,
+                    options: getChartOptions('Current (A)')
+                });
+            }
+        }
+
+        function getChartOptions(title) {
+            return {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top'
+                    },
+                    title: {
+                        display: false
+                    }
+                },
+                scales: {
+                    x: {
+                        display: true,
+                        title: {
+                            display: true,
+                            text: 'Time'
+                        }
+                    },
+                    y: {
+                        display: true,
+                        title: {
+                            display: true,
+                            text: title
+                        }
+                    }
+                },
+                elements: {
+                    point: {
+                        radius: 2
+                    },
+                    line: {
+                        tension: 0.1
+                    }
+                }
+            };
+        }
+
+        function clearCharts(utilityId) {
+            if (chartData[utilityId]) {
+                chartData[utilityId].voltage = { labels: [], datasets: [] };
+                chartData[utilityId].current = { labels: [], datasets: [] };
+            }
+
+            if (chartInstances[utilityId]) {
+                if (chartInstances[utilityId].voltage) {
+                    chartInstances[utilityId].voltage.data = chartData[utilityId].voltage;
+                    chartInstances[utilityId].voltage.update();
+                }
+                if (chartInstances[utilityId].current) {
+                    chartInstances[utilityId].current.data = chartData[utilityId].current;
+                    chartInstances[utilityId].current.update();
+                }
+            }
+        }
+
+        function updateCharts(utilityId, utilityData) {
+            if (!chartData[utilityId] || !utilityData.registers) return;
+
+            const now = new Date().toLocaleTimeString();
+            const maxDataPoints = 50; // Keep last 50 data points
+
+            // Prepare voltage and current data
+            const voltageData = {};
+            const currentData = {};
+
+            // Extract voltage and current values
+            for (const [regKey, regData] of Object.entries(utilityData.registers)) {
+                const description = regData.description.toLowerCase();
+                const unit = (regData.unit || '').toLowerCase();
+                const value = parseFloat(regData.value);
+
+                if (!isNaN(value)) {
+                    if (description.includes('voltage') || description.includes('tensione') || unit === 'v') {
+                        voltageData[regData.description] = value;
+                    } else if (description.includes('current') || description.includes('corrente') || unit === 'a') {
+                        currentData[regData.description] = value;
+                    }
+                }
+            }
+
+            // Update voltage chart data
+            if (Object.keys(voltageData).length > 0) {
+                if (chartData[utilityId].voltage.labels.length >= maxDataPoints) {
+                    chartData[utilityId].voltage.labels.shift();
+                    chartData[utilityId].voltage.datasets.forEach(dataset => dataset.data.shift());
+                }
+
+                chartData[utilityId].voltage.labels.push(now);
+
+                // Update datasets
+                Object.entries(voltageData).forEach(([description, value], index) => {
+                    if (!chartData[utilityId].voltage.datasets[index]) {
+                        chartData[utilityId].voltage.datasets[index] = {
+                            label: description,
+                            data: [],
+                            ...chartConfig.voltage,
+                            borderColor: `hsl(${index * 30}, 70%, 50%)`,
+                            backgroundColor: `hsla(${index * 30}, 70%, 50%, 0.1)`
+                        };
+                    }
+                    chartData[utilityId].voltage.datasets[index].data.push(value);
+                });
+            }
+
+            // Update current chart data
+            if (Object.keys(currentData).length > 0) {
+                if (chartData[utilityId].current.labels.length >= maxDataPoints) {
+                    chartData[utilityId].current.labels.shift();
+                    chartData[utilityId].current.datasets.forEach(dataset => dataset.data.shift());
+                }
+
+                chartData[utilityId].current.labels.push(now);
+
+                // Update datasets
+                Object.entries(currentData).forEach(([description, value], index) => {
+                    if (!chartData[utilityId].current.datasets[index]) {
+                        chartData[utilityId].current.datasets[index] = {
+                            label: description,
+                            data: [],
+                            ...chartConfig.current,
+                            borderColor: `hsl(${200 + index * 30}, 70%, 50%)`,
+                            backgroundColor: `hsla(${200 + index * 30}, 70%, 50%, 0.1)`
+                        };
+                    }
+                    chartData[utilityId].current.datasets[index].data.push(value);
+                });
+            }
+
+            // Update chart instances
+            if (chartInstances[utilityId]) {
+                if (chartInstances[utilityId].voltage) {
+                    chartInstances[utilityId].voltage.update('none');
+                }
+                if (chartInstances[utilityId].current) {
+                    chartInstances[utilityId].current.update('none');
+                }
+            }
+        }
 
         // Load initial data when page loads
         document.addEventListener('DOMContentLoaded', function() {
@@ -652,7 +915,7 @@
                     registersHtml += `
                         <div class="readings-section voltage-section">
                             <div class="section-title">⚡ Voltage Readings</div>
-                            <div class="registers-grid">
+                            <div class="registers-grid voltage-grid">
                     `;
                     for (const reg of categories.voltage) {
                         registersHtml += createRegisterBadge(reg.data, 'voltage');
@@ -665,7 +928,7 @@
                     registersHtml += `
                         <div class="readings-section current-section">
                             <div class="section-title">🔌 Current Readings</div>
-                            <div class="registers-grid">
+                            <div class="registers-grid current-grid">
                     `;
                     for (const reg of categories.current) {
                         registersHtml += createRegisterBadge(reg.data, 'current');
@@ -700,6 +963,31 @@
                 }
                 
                 registersHtml += '</div>';
+                
+                // Add charts section if monitoring is active
+                if (isMonitoring) {
+                    registersHtml += `
+                        <div class="charts-container" id="charts-${utilityId}">
+                            <div style="text-align: center; font-weight: bold; margin-bottom: 10px;">
+                                📈 Real-time Monitoring Charts
+                            </div>
+                            <div class="charts-grid">
+                                <div class="chart-section">
+                                    <div class="chart-title voltage">⚡ Voltage</div>
+                                    <div class="chart-canvas">
+                                        <canvas id="voltage-chart-${utilityId}"></canvas>
+                                    </div>
+                                </div>
+                                <div class="chart-section">
+                                    <div class="chart-title current">🔌 Current</div>
+                                    <div class="chart-canvas">
+                                        <canvas id="current-chart-${utilityId}"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
             } else {
                 registersHtml = '<div class="no-data"><p>No register data available</p></div>';
             }
@@ -817,11 +1105,55 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    // Update just this utility in the UI
-                    const utilityCard = document.getElementById(`utility-${utilityId}`);
-                    if (utilityCard) {
-                        const newCardHtml = createUtilityCard(utilityId, data.utility_data);
-                        utilityCard.outerHTML = newCardHtml;
+                    const isMonitoring = monitoringIntervals.hasOwnProperty(utilityId);
+                    
+                    if (isMonitoring) {
+                        // If monitoring is active, update charts and register values only
+                        updateCharts(utilityId, data.utility_data);
+                        
+                        // Update register values in the existing card
+                        const utilityCard = document.getElementById(`utility-${utilityId}`);
+                        if (utilityCard && data.utility_data.registers) {
+                            Object.entries(data.utility_data.registers).forEach(([regKey, regData]) => {
+                                // Update register badges
+                                const registerBadges = utilityCard.querySelectorAll('.register-badge');
+                                registerBadges.forEach(badge => {
+                                    const nameElement = badge.querySelector('.register-name');
+                                    if (nameElement && nameElement.textContent.trim() === regData.description) {
+                                        const valueElement = badge.querySelector('.register-value');
+                                        const unitElement = badge.querySelector('.register-unit');
+                                        
+                                        if (valueElement) {
+                                            valueElement.textContent = regData.value;
+                                            valueElement.className = regData.status === 'OK' ? 'register-value' : 'register-value error';
+                                        }
+                                        if (unitElement) {
+                                            unitElement.textContent = regData.unit || '';
+                                        }
+                                    }
+                                });
+                            });
+                            
+                            // Update utility status
+                            const statusElement = utilityCard.querySelector('.utility-status');
+                            if (statusElement) {
+                                statusElement.textContent = data.utility_data.status;
+                                statusElement.className = `utility-status ${getStatusClass(data.utility_data.status)}`;
+                            }
+                            
+                            // Update timestamp
+                            const timestampElement = utilityCard.querySelector('.timestamp');
+                            if (timestampElement) {
+                                timestampElement.textContent = data.utility_data.timestamp || '';
+                            }
+                        }
+                    } else {
+                        // Update just this utility in the UI (full card replacement)
+                        const utilityCard = document.getElementById(`utility-${utilityId}`);
+                        if (utilityCard) {
+                            const newCardHtml = createUtilityCard(utilityId, data.utility_data);
+                            utilityCard.outerHTML = newCardHtml;
+                        }
                     }
                 } else {
                     // Check if this is a configuration issue
@@ -864,6 +1196,26 @@
                 if (monitorStatus) {
                     monitorStatus.remove();
                 }
+
+                // Remove charts
+                const chartsContainer = document.getElementById(`charts-${utilityId}`);
+                if (chartsContainer) {
+                    chartsContainer.remove();
+                }
+
+                // Clean up chart instances
+                if (chartInstances[utilityId]) {
+                    if (chartInstances[utilityId].voltage) {
+                        chartInstances[utilityId].voltage.destroy();
+                    }
+                    if (chartInstances[utilityId].current) {
+                        chartInstances[utilityId].current.destroy();
+                    }
+                    delete chartInstances[utilityId];
+                }
+
+                // Clear chart data
+                delete chartData[utilityId];
                 
                 console.log(`Stopped monitoring utility: ${utilityId}`);
                 
@@ -881,6 +1233,40 @@
                     monitorStatus.textContent = '🔴 Live Monitoring Active (1s)';
                     utilityInfo.appendChild(monitorStatus);
                 }
+
+                // Add charts container
+                const utilityCard = document.getElementById(`utility-${utilityId}`);
+                const registersContainer = utilityCard.querySelector('.registers-container');
+                if (registersContainer && !document.getElementById(`charts-${utilityId}`)) {
+                    const chartsHtml = `
+                        <div class="charts-container" id="charts-${utilityId}">
+                            <div style="text-align: center; font-weight: bold; margin-bottom: 10px;">
+                                📈 Real-time Monitoring Charts
+                            </div>
+                            <div class="charts-grid">
+                                <div class="chart-section">
+                                    <div class="chart-title voltage">⚡ Voltage</div>
+                                    <div class="chart-canvas">
+                                        <canvas id="voltage-chart-${utilityId}"></canvas>
+                                    </div>
+                                </div>
+                                <div class="chart-section">
+                                    <div class="chart-title current">🔌 Current</div>
+                                    <div class="chart-canvas">
+                                        <canvas id="current-chart-${utilityId}"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    registersContainer.insertAdjacentHTML('afterend', chartsHtml);
+                }
+
+                // Initialize charts (clear any existing data)
+                clearCharts(utilityId);
+                setTimeout(() => {
+                    initializeCharts(utilityId);
+                }, 100);
                 
                 // Start interval for continuous monitoring
                 monitoringIntervals[utilityId] = setInterval(async () => {
