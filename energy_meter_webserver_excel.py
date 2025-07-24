@@ -1069,22 +1069,50 @@ def create_html_template():
 
             // Create voltage chart
             const voltageCanvas = document.getElementById(`voltage-chart-${utilityId}`);
-            if (voltageCanvas && !chartInstances[utilityId].voltage) {
-                chartInstances[utilityId].voltage = new Chart(voltageCanvas, {
-                    type: 'line',
-                    data: chartData[utilityId].voltage,
-                    options: getChartOptions('Voltage (V)')
-                });
+            if (voltageCanvas) {
+                // Destroy existing chart if it exists
+                if (chartInstances[utilityId].voltage) {
+                    try {
+                        chartInstances[utilityId].voltage.destroy();
+                    } catch (e) {
+                        console.log(`Error destroying voltage chart for ${utilityId}:`, e);
+                    }
+                }
+                
+                try {
+                    chartInstances[utilityId].voltage = new Chart(voltageCanvas, {
+                        type: 'line',
+                        data: chartData[utilityId].voltage,
+                        options: getChartOptions('Voltage (V)')
+                    });
+                    console.log(`Voltage chart initialized for ${utilityId}`);
+                } catch (e) {
+                    console.error(`Error creating voltage chart for ${utilityId}:`, e);
+                }
             }
 
             // Create current chart
             const currentCanvas = document.getElementById(`current-chart-${utilityId}`);
-            if (currentCanvas && !chartInstances[utilityId].current) {
-                chartInstances[utilityId].current = new Chart(currentCanvas, {
-                    type: 'line',
-                    data: chartData[utilityId].current,
-                    options: getChartOptions('Current (A)')
-                });
+            if (currentCanvas) {
+                // Destroy existing chart if it exists
+                if (chartInstances[utilityId].current) {
+                    try {
+                        chartInstances[utilityId].current.destroy();
+                    } catch (e) {
+                        console.log(`Error destroying current chart for ${utilityId}:`, e);
+                    }
+                }
+                
+                try {
+                    chartInstances[utilityId].current = new Chart(currentCanvas, {
+                        type: 'line',
+                        data: chartData[utilityId].current,
+                        options: getChartOptions('Current (A)')
+                    });
+                    console.log(`Current chart initialized for ${utilityId}`);
+                } catch (e) {
+                    console.error(`Error creating current chart for ${utilityId}:`, e);
+                }
             }
         }
 
@@ -1148,6 +1176,14 @@ def create_html_template():
 
         function updateCharts(utilityId, utilityData) {
             if (!chartData[utilityId] || !utilityData.registers) return;
+
+            // Check if chart instances exist
+            if (!chartInstances[utilityId] || 
+                !chartInstances[utilityId].voltage || 
+                !chartInstances[utilityId].current) {
+                console.log(`Chart instances missing for ${utilityId}, skipping update`);
+                return;
+            }
 
             const now = new Date().toLocaleTimeString();
             const maxDataPoints = 50; // Keep last 50 data points
@@ -1219,14 +1255,29 @@ def create_html_template():
                 });
             }
 
-            // Update chart instances
-            if (chartInstances[utilityId]) {
-                if (chartInstances[utilityId].voltage) {
+            // Update chart instances with error handling
+            try {
+                if (chartInstances[utilityId].voltage && chartInstances[utilityId].voltage.canvas) {
                     chartInstances[utilityId].voltage.update('none');
                 }
-                if (chartInstances[utilityId].current) {
+            } catch (e) {
+                console.error(`Error updating voltage chart for ${utilityId}:`, e);
+                // Try to reinitialize the chart
+                setTimeout(() => {
+                    initializeCharts(utilityId);
+                }, 100);
+            }
+
+            try {
+                if (chartInstances[utilityId].current && chartInstances[utilityId].current.canvas) {
                     chartInstances[utilityId].current.update('none');
                 }
+            } catch (e) {
+                console.error(`Error updating current chart for ${utilityId}:`, e);
+                // Try to reinitialize the chart
+                setTimeout(() => {
+                    initializeCharts(utilityId);
+                }, 100);
             }
         }
 
@@ -1621,6 +1672,59 @@ def create_html_template():
                             const timestampElement = utilityCard.querySelector('.timestamp');
                             if (timestampElement) {
                                 timestampElement.textContent = data.utility_data.timestamp || '';
+                            }
+
+                            // Ensure charts are still present and functioning
+                            const chartsContainer = document.getElementById(`charts-${utilityId}`);
+                            if (!chartsContainer) {
+                                // Charts container is missing, recreate it
+                                console.log(`Charts missing for ${utilityId}, recreating...`);
+                                const registersContainer = utilityCard.querySelector('.registers-container');
+                                if (registersContainer) {
+                                    const chartsHtml = `
+                                        <div class="charts-container" id="charts-${utilityId}">
+                                            <div style="text-align: center; font-weight: bold; margin-bottom: 10px;">
+                                                📈 Real-time Monitoring Charts
+                                            </div>
+                                            <div class="charts-grid">
+                                                <div class="chart-section">
+                                                    <div class="chart-title voltage">⚡ Voltage</div>
+                                                    <div class="chart-canvas">
+                                                        <canvas id="voltage-chart-${utilityId}"></canvas>
+                                                    </div>
+                                                </div>
+                                                <div class="chart-section">
+                                                    <div class="chart-title current">🔌 Current</div>
+                                                    <div class="chart-canvas">
+                                                        <canvas id="current-chart-${utilityId}"></canvas>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    `;
+                                    registersContainer.insertAdjacentHTML('afterend', chartsHtml);
+                                    
+                                    // Reinitialize charts
+                                    setTimeout(() => {
+                                        initializeCharts(utilityId);
+                                    }, 100);
+                                }
+                            } else {
+                                // Charts exist, check if chart instances are still valid
+                                const voltageCanvas = document.getElementById(`voltage-chart-${utilityId}`);
+                                const currentCanvas = document.getElementById(`current-chart-${utilityId}`);
+                                
+                                if (voltageCanvas && (!chartInstances[utilityId] || !chartInstances[utilityId].voltage)) {
+                                    console.log(`Voltage chart instance missing for ${utilityId}, reinitializing...`);
+                                    setTimeout(() => {
+                                        initializeCharts(utilityId);
+                                    }, 100);
+                                } else if (currentCanvas && (!chartInstances[utilityId] || !chartInstances[utilityId].current)) {
+                                    console.log(`Current chart instance missing for ${utilityId}, reinitializing...`);
+                                    setTimeout(() => {
+                                        initializeCharts(utilityId);
+                                    }, 100);
+                                }
                             }
                         }
                     } else {
