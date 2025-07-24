@@ -273,6 +273,23 @@
             margin-left: 5px;
             font-size: 0.9em;
         }
+
+        /* Badge styles for reading categories */
+        .badge {
+            display: inline-block;
+            padding: 3px 7px;
+            border-radius: 4px;
+            font-size: 0.75em;
+            color: #fff;
+            margin-right: 8px;
+        }
+        .badge-voltage { background: #e74c3c; }
+        .badge-current { background: #3498db; }
+        .badge-active { background: #f39c12; }
+        .badge-reactive { background: #9b59b6; }
+        .badge-apparent { background: #1abc9c; }
+        .badge-pf { background: #2ecc71; }
+        .badge-fe { background: #95a5a6; }
         
         .btn {
             background: #667eea;
@@ -507,13 +524,23 @@
                         <div class="reading-group">
                             <h3>${groupName}</h3>
                     `;
-                    
+
                     Object.keys(groupReadings).forEach(regKey => {
                         const reading = groupReadings[regKey];
                         const label = reading.description.split('(')[0].trim();
+                        const badgeMap = {
+                            'Voltages': 'badge-voltage',
+                            'Currents': 'badge-current',
+                            'Active Power': 'badge-active',
+                            'Reactive Power': 'badge-reactive',
+                            'Apparent Power': 'badge-apparent',
+                            'Power Factor': 'badge-pf',
+                            'Frequency & Energy': 'badge-fe'
+                        };
+                        const badgeClass = badgeMap[groupName] || 'badge-fe';
                         html += `
                             <div class="reading-item">
-                                <div class="reading-label">${label}</div>
+                                <span class="badge ${badgeClass}">${label}</span>
                                 <div>
                                     <span class="reading-value">${reading.value.toFixed(2)}</span>
                                     <span class="reading-unit">${reading.unit}</span>

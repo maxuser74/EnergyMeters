@@ -562,7 +562,10 @@ meter_reader = EnergyMeterReader()
 def background_reader():
     """Background thread to continuously read energy meter data"""
     while True:
-        meter_reader.read_all_registers()
+        try:
+            meter_reader.read_all_registers()
+        except Exception as e:
+            print(f"Background reader error: {e}")
         time.sleep(5)  # Wait 5 seconds before next reading
 
 @app.route('/')
