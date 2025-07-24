@@ -1376,12 +1376,14 @@ def create_html_template():
             const isMonitoring = monitoringIntervals.hasOwnProperty(utilityId);
             let registersHtml = '';
             if (utilityData.registers && Object.keys(utilityData.registers).length > 0) {
-                // Dynamically categorize registers by their category field
+                // Dynamically categorize registers by their category field (no 'other' fallback)
                 const categories = {};
                 for (const [regKey, regData] of Object.entries(utilityData.registers)) {
-                    let cat = regData.category || 'other';
-                    if (!categories[cat]) categories[cat] = [];
-                    categories[cat].push({key: regKey, data: regData});
+                    if (regData.category) {
+                        let cat = regData.category;
+                        if (!categories[cat]) categories[cat] = [];
+                        categories[cat].push({key: regKey, data: regData});
+                    }
                 }
                 // Sort categories: voltage, current, energy, then others alphabetically
                 const mainOrder = ['voltage', 'current', 'energy'];
