@@ -366,15 +366,41 @@ def get_readings():
 
 @app.route('/api/refresh_all')
 def refresh_all():
-    """API endpoint to refresh all utilities"""
-    print("Manual refresh of all utilities requested")
-    readings = energy_reader.read_all_utilities()
+    """API endpoint to refresh all utilities and reload configuration"""
+    global utilities_config, registers_config
     
-    return jsonify({
-        'success': True,
-        'readings': readings,
-        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    })
+    print("Manual refresh of all utilities requested - reloading configuration files")
+    
+    try:
+        # Reload configuration from Excel files
+        print("Reloading configuration from Excel files...")
+        energy_reader.load_configuration()
+        
+        # Update global variables with new configuration
+        utilities_config = energy_reader.load_utilities_from_excel()
+        registers_config = energy_reader.load_registers_from_excel()
+        
+        print(f"Configuration reloaded: {len(utilities_config)} utilities, {len(registers_config)} registers")
+        
+        # Read all utilities with new configuration
+        readings = energy_reader.read_all_utilities()
+        
+        return jsonify({
+            'success': True,
+            'readings': readings,
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'message': f'Configuration reloaded: {len(utilities_config)} utilities, {len(registers_config)} registers',
+            'utilities_count': len(utilities_config),
+            'registers_count': len(registers_config)
+        })
+        
+    except Exception as e:
+        print(f"Error reloading configuration: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'Failed to reload configuration: {str(e)}',
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }), 500
 
 @app.route('/api/refresh_utility/<utility_id>')
 def refresh_utility(utility_id):
@@ -389,7 +415,12 @@ def refresh_utility(utility_id):
             break
     
     if not utility:
-        return jsonify({'success': False, 'error': 'Utility not found'}), 404
+        print(f"Utility {utility_id} not found in current configuration - may have been removed")
+        return jsonify({
+            'success': False, 
+            'error': 'Utility not found in current configuration. Try refreshing all to reload configuration.',
+            'suggestion': 'reload_config'
+        }), 404
     
     print(f"Manual refresh requested for utility: {utility['utility_name']}")
     
@@ -596,41 +627,170 @@ def create_html_template():
             background: #f39c12;
         }
 
-        .registers-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 15px;
+        .monitor-toggle {
+            background: #95a5a6;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+            margin-left: 10px;
+            font-size: 0.9em;
+        }
+
+        .monitor-toggle:hover {
+            transform: scale(1.05);
+        }
+
+        .monitor-toggle.active {
+            background: #e74c3c;
+            animation: pulse 2s infinite;
+        }
+
+        .monitor-toggle.disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+
+        .utility-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .monitor-status {
+            font-size: 0.8em;
+            color: #e74c3c;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+
+        .registers-container {
             padding: 20px;
         }
 
-        .register-item {
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 8px;
-            border-left: 4px solid #3498db;
+        .readings-section {
+            margin-bottom: 25px;
         }
 
-        .register-item.error {
-            border-left-color: #e74c3c;
+        .section-title {
+            font-size: 1.1em;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 15px;
+            padding: 8px 12px;
+            border-radius: 5px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .voltage-section .section-title {
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            color: white;
+        }
+
+        .current-section .section-title {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+        }
+
+        .energy-section .section-title {
+            background: linear-gradient(135deg, #27ae60, #229954);
+            color: white;
+        }
+
+        .other-section .section-title {
+            background: linear-gradient(135deg, #9b59b6, #8e44ad);
+            color: white;
+        }
+
+        .registers-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+        }
+
+        .register-badge {
+            background: white;
+            border: 2px solid #e0e0e0;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .register-badge:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .register-badge.voltage {
+            border-color: #e74c3c;
+            background: linear-gradient(135deg, #fff5f5, #ffeaea);
+        }
+
+        .register-badge.current {
+            border-color: #3498db;
+            background: linear-gradient(135deg, #f0f8ff, #e6f3ff);
+        }
+
+        .register-badge.energy {
+            border-color: #27ae60;
+            background: linear-gradient(135deg, #f0fff4, #e6ffed);
+        }
+
+        .register-badge.other {
+            border-color: #9b59b6;
+            background: linear-gradient(135deg, #faf5ff, #f3e8ff);
+        }
+
+        .register-badge.error {
+            border-color: #e74c3c;
             background: #fdf2f2;
         }
 
-        .register-item.ok {
-            border-left-color: #27ae60;
-        }
-
         .register-name {
-            font-weight: bold;
+            font-weight: 600;
             color: #2c3e50;
             margin-bottom: 8px;
-            font-size: 0.9em;
-            line-height: 1.3;
+            font-size: 0.8em;
+            line-height: 1.2;
+            min-height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .register-value {
-            font-size: 1.4em;
+            font-size: 1.6em;
             font-weight: bold;
-            color: #3498db;
+            margin-bottom: 4px;
+        }
+
+        .register-badge.voltage .register-value {
+            color: #c0392b;
+        }
+
+        .register-badge.current .register-value {
+            color: #2980b9;
+        }
+
+        .register-badge.energy .register-value {
+            color: #229954;
+        }
+
+        .register-badge.other .register-value {
+            color: #8e44ad;
         }
 
         .register-value.error {
@@ -639,8 +799,10 @@ def create_html_template():
 
         .register-unit {
             color: #7f8c8d;
-            font-size: 0.8em;
-            margin-left: 5px;
+            font-size: 0.7em;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         .utility-status {
@@ -690,12 +852,55 @@ def create_html_template():
                 gap: 15px;
             }
 
+            .utility-header-actions {
+                justify-content: center;
+                flex-wrap: wrap;
+            }
+
             .registers-grid {
-                grid-template-columns: 1fr;
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                gap: 10px;
+            }
+
+            .register-badge {
+                padding: 10px;
+            }
+
+            .register-name {
+                font-size: 0.75em;
+                min-height: 28px;
+            }
+
+            .register-value {
+                font-size: 1.4em;
+            }
+
+            .section-title {
+                font-size: 1em;
+                padding: 6px 10px;
             }
 
             .header h1 {
                 font-size: 2em;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .registers-grid {
+                grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            }
+
+            .register-badge {
+                padding: 8px;
+            }
+
+            .register-name {
+                font-size: 0.7em;
+                min-height: 24px;
+            }
+
+            .register-value {
+                font-size: 1.2em;
             }
         }
 
@@ -712,6 +917,15 @@ def create_html_template():
             border-radius: 5px;
             margin: 20px 0;
             border: 1px solid #f5c6cb;
+        }
+
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border: 1px solid #c3e6cb;
         }
     </style>
 </head>
@@ -733,6 +947,9 @@ def create_html_template():
             <div class="status-item">
                 <span id="utilitiesCount">Utilities: 0</span>
             </div>
+            <div class="status-item">
+                <span id="monitoringCount">Live Monitoring: 0</span>
+            </div>
             <button class="refresh-all-btn" id="refreshAllBtn" onclick="refreshAll()">
                 🔄 Refresh All
             </button>
@@ -748,6 +965,7 @@ def create_html_template():
 
     <script>
         let isRefreshing = false;
+        let monitoringIntervals = {}; // Store active monitoring intervals
 
         // Load initial data when page loads
         document.addEventListener('DOMContentLoaded', function() {
@@ -756,6 +974,40 @@ def create_html_template():
             
             // Auto-refresh every 30 seconds
             setInterval(loadReadings, 30000);
+        });
+
+        // Cleanup monitoring intervals when page is closed
+        window.addEventListener('beforeunload', function() {
+            Object.values(monitoringIntervals).forEach(interval => {
+                clearInterval(interval);
+            });
+        });
+
+        // Pause monitoring when page is not visible, resume when visible
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) {
+                // Page is hidden, pause all monitoring
+                Object.keys(monitoringIntervals).forEach(utilityId => {
+                    clearInterval(monitoringIntervals[utilityId]);
+                    // Don't delete the key, just clear the interval
+                });
+                console.log('Page hidden - paused all monitoring');
+            } else {
+                // Page is visible, resume monitoring for previously active utilities
+                Object.keys(monitoringIntervals).forEach(utilityId => {
+                    if (monitoringIntervals[utilityId] === null || monitoringIntervals[utilityId] === undefined) {
+                        // Restart the interval
+                        monitoringIntervals[utilityId] = setInterval(async () => {
+                            try {
+                                await refreshUtility(utilityId, null);
+                            } catch (error) {
+                                console.error(`Error in continuous monitoring for ${utilityId}:`, error);
+                            }
+                        }, 1000);
+                    }
+                });
+                console.log('Page visible - resumed monitoring');
+            }
         });
 
         async function loadConfiguration() {
@@ -816,41 +1068,120 @@ def create_html_template():
                 return;
             }
             
+            // Check for utilities that no longer exist in the new configuration
+            const currentUtilityIds = Object.keys(data.readings);
+            const monitoredUtilityIds = Object.keys(monitoringIntervals);
+            
+            // Stop monitoring for utilities that no longer exist
+            monitoredUtilityIds.forEach(utilityId => {
+                if (!currentUtilityIds.includes(utilityId)) {
+                    console.log(`Stopping monitoring for removed utility: ${utilityId}`);
+                    clearInterval(monitoringIntervals[utilityId]);
+                    delete monitoringIntervals[utilityId];
+                }
+            });
+            
             let html = '';
             for (const [utilityId, utilityData] of Object.entries(data.readings)) {
                 html += createUtilityCard(utilityId, utilityData);
             }
             
             grid.innerHTML = html;
+            
+            // Update monitoring count
+            updateMonitoringCount();
         }
 
         function createUtilityCard(utilityId, utilityData) {
             const statusClass = getStatusClass(utilityData.status);
+            const isMonitoring = monitoringIntervals.hasOwnProperty(utilityId);
             
             let registersHtml = '';
             if (utilityData.registers && Object.keys(utilityData.registers).length > 0) {
-                registersHtml = '<div class="registers-grid">';
+                // Categorize registers
+                const categories = {
+                    voltage: [],
+                    current: [],
+                    energy: [],
+                    other: []
+                };
+                
                 for (const [regKey, regData] of Object.entries(utilityData.registers)) {
-                    const registerClass = regData.status === 'OK' ? 'ok' : 'error';
-                    const valueClass = regData.status === 'OK' ? '' : 'error';
+                    const description = regData.description.toLowerCase();
+                    const unit = (regData.unit || '').toLowerCase();
                     
-                    registersHtml += `
-                        <div class="register-item ${registerClass}">
-                            <div class="register-name">${regData.description}</div>
-                            <div class="register-value ${valueClass}">
-                                ${regData.value}
-                                <span class="register-unit">${regData.unit || ''}</span>
-                            </div>
-                        </div>
-                    `;
+                    if (description.includes('voltage') || description.includes('tensione') || unit === 'v') {
+                        categories.voltage.push({key: regKey, data: regData});
+                    } else if (description.includes('current') || description.includes('corrente') || unit === 'a') {
+                        categories.current.push({key: regKey, data: regData});
+                    } else if (description.includes('energy') || description.includes('power') || description.includes('energia') || description.includes('potenza') || unit === 'kwh' || unit === 'w') {
+                        categories.energy.push({key: regKey, data: regData});
+                    } else {
+                        categories.other.push({key: regKey, data: regData});
+                    }
                 }
+                
+                registersHtml = '<div class="registers-container">';
+                
+                // Voltage section
+                if (categories.voltage.length > 0) {
+                    registersHtml += `
+                        <div class="readings-section voltage-section">
+                            <div class="section-title">⚡ Voltage Readings</div>
+                            <div class="registers-grid">
+                    `;
+                    for (const reg of categories.voltage) {
+                        registersHtml += createRegisterBadge(reg.data, 'voltage');
+                    }
+                    registersHtml += '</div></div>';
+                }
+                
+                // Current section
+                if (categories.current.length > 0) {
+                    registersHtml += `
+                        <div class="readings-section current-section">
+                            <div class="section-title">🔌 Current Readings</div>
+                            <div class="registers-grid">
+                    `;
+                    for (const reg of categories.current) {
+                        registersHtml += createRegisterBadge(reg.data, 'current');
+                    }
+                    registersHtml += '</div></div>';
+                }
+                
+                // Energy section
+                if (categories.energy.length > 0) {
+                    registersHtml += `
+                        <div class="readings-section energy-section">
+                            <div class="section-title">🔋 Energy/Power Readings</div>
+                            <div class="registers-grid">
+                    `;
+                    for (const reg of categories.energy) {
+                        registersHtml += createRegisterBadge(reg.data, 'energy');
+                    }
+                    registersHtml += '</div></div>';
+                }
+                
+                // Other section
+                if (categories.other.length > 0) {
+                    registersHtml += `
+                        <div class="readings-section other-section">
+                            <div class="section-title">📊 Other Readings</div>
+                            <div class="registers-grid">
+                    `;
+                    for (const reg of categories.other) {
+                        registersHtml += createRegisterBadge(reg.data, 'other');
+                    }
+                    registersHtml += '</div></div>';
+                }
+                
                 registersHtml += '</div>';
             } else {
                 registersHtml = '<div class="no-data"><p>No register data available</p></div>';
             }
             
             return `
-                <div class="utility-card">
+                <div class="utility-card" id="utility-${utilityId}">
                     <div class="utility-header">
                         <div class="utility-info">
                             <h3>${utilityData.name}</h3>
@@ -863,12 +1194,35 @@ def create_html_template():
                             <div class="timestamp">
                                 ${utilityData.timestamp || ''}
                             </div>
+                            ${isMonitoring ? '<div class="monitor-status">🔴 Live Monitoring Active (1s)</div>' : ''}
                         </div>
-                        <button class="refresh-btn" onclick="refreshUtility('${utilityId}', this)">
-                            🔄 Refresh
-                        </button>
+                        <div class="utility-header-actions">
+                            <button class="refresh-btn" onclick="refreshUtility('${utilityId}', this)">
+                                🔄 Refresh
+                            </button>
+                            <button class="monitor-toggle ${isMonitoring ? 'active' : ''}" 
+                                    onclick="toggleMonitoring('${utilityId}', this)"
+                                    title="${isMonitoring ? 'Stop continuous monitoring' : 'Start continuous monitoring (1s)'}">
+                                ${isMonitoring ? '🛑 Stop' : '🔴 Monitor'}
+                            </button>
+                        </div>
                     </div>
                     ${registersHtml}
+                </div>
+            `;
+        }
+
+        function createRegisterBadge(regData, category) {
+            const badgeClass = regData.status === 'OK' ? category : 'error';
+            const valueClass = regData.status === 'OK' ? '' : 'error';
+            
+            return `
+                <div class="register-badge ${badgeClass}">
+                    <div class="register-name">${regData.description}</div>
+                    <div class="register-value ${valueClass}">
+                        ${regData.value}
+                    </div>
+                    <div class="register-unit">${regData.unit || ''}</div>
                 </div>
             `;
         }
@@ -885,20 +1239,34 @@ def create_html_template():
             isRefreshing = true;
             const btn = document.getElementById('refreshAllBtn');
             btn.disabled = true;
-            btn.textContent = '🔄 Refreshing...';
+            btn.textContent = '🔄 Reloading Config & Refreshing...';
             
             try {
                 const response = await fetch('/api/refresh_all');
                 const data = await response.json();
                 
                 if (data.success) {
+                    // Update utilities count if configuration changed
+                    if (data.utilities_count !== undefined && data.registers_count !== undefined) {
+                        document.getElementById('utilitiesCount').textContent = 
+                            `Utilities: ${data.utilities_count} | Registers: ${data.registers_count}`;
+                    }
+                    
+                    // Show configuration reload message if provided
+                    if (data.message) {
+                        console.log('Configuration reloaded:', data.message);
+                        showSuccess(data.message);
+                    }
+                    
                     updateUI({
                         readings: data.readings,
                         last_update: data.timestamp,
-                        connection_status: 'Manual refresh completed'
+                        connection_status: 'Configuration reloaded and refreshed',
+                        utilities_count: data.utilities_count,
+                        registers_count: data.registers_count
                     });
                 } else {
-                    showError('Failed to refresh all utilities');
+                    showError(`Failed to refresh: ${data.error || 'Unknown error'}`);
                 }
                 
             } catch (error) {
@@ -912,11 +1280,13 @@ def create_html_template():
         }
 
         async function refreshUtility(utilityId, button) {
-            if (button.disabled) return;
+            if (button && button.disabled) return;
             
-            button.disabled = true;
-            button.className = 'refresh-btn loading';
-            button.textContent = '🔄 Loading...';
+            if (button) {
+                button.disabled = true;
+                button.className = 'refresh-btn loading';
+                button.textContent = '🔄 Loading...';
+            }
             
             try {
                 const response = await fetch(`/api/refresh_utility/${utilityId}`);
@@ -924,20 +1294,93 @@ def create_html_template():
                 
                 if (data.success) {
                     // Update just this utility in the UI
-                    const utilityCard = button.closest('.utility-card');
-                    const newCardHtml = createUtilityCard(utilityId, data.utility_data);
-                    utilityCard.outerHTML = newCardHtml;
+                    const utilityCard = document.getElementById(`utility-${utilityId}`);
+                    if (utilityCard) {
+                        const newCardHtml = createUtilityCard(utilityId, data.utility_data);
+                        utilityCard.outerHTML = newCardHtml;
+                    }
                 } else {
-                    showError(`Failed to refresh utility: ${data.error || 'Unknown error'}`);
+                    // Check if this is a configuration issue
+                    if (data.suggestion === 'reload_config') {
+                        showError(`${data.error} Click "Refresh All" to reload configuration.`);
+                    } else {
+                        showError(`Failed to refresh utility: ${data.error || 'Unknown error'}`);
+                    }
                 }
                 
             } catch (error) {
                 console.error('Error refreshing utility:', error);
                 showError('Error occurred while refreshing utility');
             } finally {
-                button.disabled = false;
-                button.className = 'refresh-btn';
-                button.textContent = '🔄 Refresh';
+                if (button) {
+                    button.disabled = false;
+                    button.className = 'refresh-btn';
+                    button.textContent = '🔄 Refresh';
+                }
+            }
+        }
+
+        function toggleMonitoring(utilityId, button) {
+            if (button.disabled) return;
+            
+            const isCurrentlyMonitoring = monitoringIntervals.hasOwnProperty(utilityId);
+            
+            if (isCurrentlyMonitoring) {
+                // Stop monitoring
+                clearInterval(monitoringIntervals[utilityId]);
+                delete monitoringIntervals[utilityId];
+                
+                button.className = 'monitor-toggle';
+                button.textContent = '🔴 Monitor';
+                button.title = 'Start continuous monitoring (1s)';
+                
+                // Remove monitor status
+                const utilityCard = document.getElementById(`utility-${utilityId}`);
+                const monitorStatus = utilityCard.querySelector('.monitor-status');
+                if (monitorStatus) {
+                    monitorStatus.remove();
+                }
+                
+                console.log(`Stopped monitoring utility: ${utilityId}`);
+                
+            } else {
+                // Start monitoring
+                button.className = 'monitor-toggle active';
+                button.textContent = '🛑 Stop';
+                button.title = 'Stop continuous monitoring';
+                
+                // Add monitor status
+                const utilityInfo = document.querySelector(`#utility-${utilityId} .utility-info`);
+                if (utilityInfo && !utilityInfo.querySelector('.monitor-status')) {
+                    const monitorStatus = document.createElement('div');
+                    monitorStatus.className = 'monitor-status';
+                    monitorStatus.textContent = '🔴 Live Monitoring Active (1s)';
+                    utilityInfo.appendChild(monitorStatus);
+                }
+                
+                // Start interval for continuous monitoring
+                monitoringIntervals[utilityId] = setInterval(async () => {
+                    try {
+                        await refreshUtility(utilityId, null); // Don't pass button to avoid UI changes
+                    } catch (error) {
+                        console.error(`Error in continuous monitoring for ${utilityId}:`, error);
+                    }
+                }, 1000); // 1 second interval
+                
+                console.log(`Started continuous monitoring for utility: ${utilityId}`);
+            }
+            
+            // Update monitoring count in status bar
+            updateMonitoringCount();
+        }
+
+        function updateMonitoringCount() {
+            const monitoringCount = Object.keys(monitoringIntervals).length;
+            const countElement = document.getElementById('monitoringCount');
+            if (countElement) {
+                countElement.textContent = `Live Monitoring: ${monitoringCount}`;
+                countElement.style.color = monitoringCount > 0 ? '#e74c3c' : '#7f8c8d';
+                countElement.style.fontWeight = monitoringCount > 0 ? 'bold' : 'normal';
             }
         }
 
@@ -954,6 +1397,23 @@ def create_html_template():
             setTimeout(() => {
                 if (errorDiv.parentNode) {
                     errorDiv.parentNode.removeChild(errorDiv);
+                }
+            }, 5000);
+        }
+
+        function showSuccess(message) {
+            const grid = document.getElementById('utilitiesGrid');
+            const successDiv = document.createElement('div');
+            successDiv.className = 'success-message';
+            successDiv.textContent = message;
+            
+            // Insert at the top
+            grid.insertBefore(successDiv, grid.firstChild);
+            
+            // Remove after 5 seconds
+            setTimeout(() => {
+                if (successDiv.parentNode) {
+                    successDiv.parentNode.removeChild(successDiv);
                 }
             }, 5000);
         }
