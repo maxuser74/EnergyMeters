@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Energy Meter Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@4.1.11/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 p-6">
+  <div class="container mx-auto">
+    <h1 class="text-2xl font-bold mb-4">Energy Meter Dashboard</h1>
+    <button id="refreshAll" class="bg-blue-500 text-white px-4 py-2 rounded mb-4">Refresh All</button>
+    <div id="utilities" class="space-y-4"></div>
+  </div>
+
+<script>
+async function loadConfig() {
+  const res = await fetch('/api/configuration');
+  return res.json();
+}
+
+async function refreshAll() {
+  const btn = document.getElementById('refreshAll');
+  btn.disabled = true;
+  await fetch('/api/refresh_all');
+  btn.disabled = false;
+  loadReadings();
+}
+
+async function refreshUtility(id) {
+  await fetch('/api/refresh_utility/' + id);
+  loadReadings();
+}
+
+async function loadReadings() {
+  const res = await fetch('/api/readings');
+  const data = await res.json();
+  const container = document.getElementById('utilities');
+  container.innerHTML = '';
+  for (const util of config.utilities) {
+    const uDiv = document.createElement('div');
+    uDiv.className = 'bg-white p-4 shadow rounded';
+    uDiv.innerHTML = `<div class="flex justify-between items-center"><div><h2 class="font-semibold">${util.utility_name}</h2><p class="text-sm text-gray-500">${util.ip_address}</p></div><button class="bg-green-500 text-white px-3 py-1 rounded" onclick="refreshUtility('${util.id}')">Refresh</button></div>`;
+    const readings = data.readings[util.id];
+    if (readings && readings.success) {
+      const list = document.createElement('ul');
+      for (const [k,v] of Object.entries(readings.readings)) {
+        const li = document.createElement('li');
+        li.textContent = `${k}: ${v}`;
+        list.appendChild(li);
+      }
+      uDiv.appendChild(list);
+    } else {
+      uDiv.innerHTML += `<p class="text-red-600 mt-2">${readings? readings.error : 'No data'}</p>`;
+    }
+    container.appendChild(uDiv);
+  }
+}
+
+let config = {};
+loadConfig().then(c => { config = c; loadReadings(); });
+document.getElementById('refreshAll').addEventListener('click', refreshAll);
+</script>
+</body>
+</html>
