@@ -104,7 +104,14 @@ class ExcelBasedEnergyMeterReader:
                 target_unit = str(row['Convert to']) if 'Convert to' in row else source_unit
                 # Use 'Type' column for grouping, fallback to Lettura if missing
                 if 'Type' in df_registri.columns and pd.notna(row['Type']):
-                    category = str(row['Type']).strip().replace(' ', '_').replace('/', '_').lower()
+                    category = str(row['Type']).strip().lower()
+                    category = category.replace(' ', '_').replace('/', '_')
+                    if category == 'currents':
+                        category = 'current'
+                    elif category == 'voltages':
+                        category = 'voltage'
+                    elif category == 'power_factors':
+                        category = 'power_factor'
                 else:
                     category = description.strip().replace(' ', '_').replace('/', '_').lower()
                 # Calculate register count and start address based on data type
@@ -277,14 +284,16 @@ class ExcelBasedEnergyMeterReader:
                             'description': register_info['description'],
                             'value': round(value, 2) if isinstance(value, float) else value,
                             'unit': register_info.get('target_unit', ''),
-                            'status': 'OK'
+                            'status': 'OK',
+                            'category': register_info.get('category', 'other')
                         }
                     else:
                         utility_data['registers'][register_key] = {
                             'description': register_info['description'],
                             'value': 'N/A',
                             'unit': register_info.get('target_unit', ''),
-                            'status': 'ERROR'
+                            'status': 'ERROR',
+                            'category': register_info.get('category', 'other')
                         }
                         utility_data['status'] = 'PARTIAL'
                         
@@ -749,8 +758,13 @@ def create_html_template():
             color: white;
         }
 
-        .energy-section .section-title {
+        .power-section .section-title {
             background: linear-gradient(135deg, #27ae60, #229954);
+            color: white;
+        }
+
+        .power_factor-section .section-title {
+            background: linear-gradient(135deg, #f1c40f, #f39c12);
             color: white;
         }
 
@@ -824,9 +838,14 @@ def create_html_template():
             background: linear-gradient(135deg, #f0f8ff, #e6f3ff);
         }
 
-        .register-badge.energy {
+        .register-badge.power {
             border-color: #27ae60;
             background: linear-gradient(135deg, #f0fff4, #e6ffed);
+        }
+
+        .register-badge.power_factor {
+            border-color: #8e44ad;
+            background: linear-gradient(135deg, #f5e6ff, #f3e8ff);
         }
 
         .register-badge.other {
@@ -846,10 +865,6 @@ def create_html_template():
         .register-badge.temperature {
             border-color: #16a085;
             background: linear-gradient(135deg, #e6fffa, #e0f7fa);
-        }
-        .register-badge.power_factor {
-            border-color: #8e44ad;
-            background: linear-gradient(135deg, #f5e6ff, #f3e8ff);
         }
         /* Generic fallback for any unknown category: use HSL based on category name hash */
         .register-badge[data-category] {
@@ -1383,8 +1398,8 @@ def create_html_template():
                     if (!categories[cat]) categories[cat] = [];
                     categories[cat].push({key: regKey, data: regData});
                 }
-                // Sort categories: voltage, current, energy, then others alphabetically
-                const mainOrder = ['voltage', 'current', 'energy'];
+                // Sort categories using register 'Type' values
+                const mainOrder = ['voltage', 'current', 'power', 'power_factor'];
                 const allCats = Object.keys(categories);
                 const sortedCats = [
                     ...mainOrder.filter(c => allCats.includes(c)),
@@ -1401,7 +1416,8 @@ def create_html_template():
                     let icon = '';
                     if (cat === 'voltage') icon = '⚡';
                     else if (cat === 'current') icon = '🔌';
-                    else if (cat === 'energy') icon = '🔋';
+                    else if (cat === 'power') icon = '🔋';
+                    else if (cat === 'power_factor') icon = '📐';
                     else icon = '📊';
                     // Section CSS class
                     let sectionClass = `${cat}-section`;
@@ -1489,7 +1505,7 @@ def create_html_template():
             const valueClass = regData.status === 'OK' ? '' : 'error';
             // Add data-category for dynamic coloring
             let dataAttr = '';
-            if (regData.status === 'OK' && !['voltage','current','energy','other'].includes(category)) {
+            if (regData.status === 'OK' && !['voltage','current','power','power_factor','other'].includes(category)) {
                 dataAttr = `data-category="${category}"`;
             }
             // Show the type/category in the badge for clarity

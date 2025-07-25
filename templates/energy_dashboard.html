@@ -277,8 +277,13 @@
             color: white;
         }
 
-        .energy-section .section-title {
+        .power-section .section-title {
             background: linear-gradient(135deg, #27ae60, #229954);
+            color: white;
+        }
+
+        .power_factor-section .section-title {
+            background: linear-gradient(135deg, #f1c40f, #f39c12);
             color: white;
         }
 
@@ -352,10 +357,11 @@
             background: linear-gradient(135deg, #f0f8ff, #e6f3ff);
         }
 
-        .register-badge.energy {
+        .register-badge.power {
             border-color: #27ae60;
             background: linear-gradient(135deg, #f0fff4, #e6ffed);
         }
+
 
         .register-badge.other {
             border-color: #9b59b6;
@@ -911,8 +917,8 @@
                     if (!categories[cat]) categories[cat] = [];
                     categories[cat].push({key: regKey, data: regData});
                 }
-                // Sort categories: voltage, current, energy, then others alphabetically
-                const mainOrder = ['voltage', 'current', 'energy'];
+                // Sort categories using register 'Type' values
+                const mainOrder = ['voltage', 'current', 'power', 'power_factor'];
                 const allCats = Object.keys(categories);
                 const sortedCats = [
                     ...mainOrder.filter(c => allCats.includes(c)),
@@ -929,7 +935,8 @@
                     let icon = '';
                     if (cat === 'voltage') icon = '⚡';
                     else if (cat === 'current') icon = '🔌';
-                    else if (cat === 'energy') icon = '🔋';
+                    else if (cat === 'power') icon = '🔋';
+                    else if (cat === 'power_factor') icon = '📐';
                     else icon = '📊';
                     // Section CSS class
                     let sectionClass = `${cat}-section`;
@@ -1017,7 +1024,7 @@
             const valueClass = regData.status === 'OK' ? '' : 'error';
             // Add data-category for dynamic coloring
             let dataAttr = '';
-            if (regData.status === 'OK' && !['voltage','current','energy','other'].includes(category)) {
+            if (regData.status === 'OK' && !['voltage','current','power','power_factor','other'].includes(category)) {
                 dataAttr = `data-category="${category}"`;
             }
             // Show the type/category in the badge for clarity
