@@ -763,13 +763,13 @@ def create_html_template():
         }
 
         .registers-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            display: flex;
+            flex-wrap: nowrap;
             gap: 10px;
+            overflow-x: auto;
         }
 
         .registers-grid.voltage-grid, .registers-grid.current-grid {
-            grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
             gap: 6px;
         }
 
@@ -781,6 +781,10 @@ def create_html_template():
             text-align: center;
             transition: all 0.3s ease;
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
         }
 
         .register-badge.voltage, .register-badge.current {
@@ -805,15 +809,25 @@ def create_html_template():
             margin-bottom: 4px;
         }
 
+        .register-measure {
+            display: flex;
+            align-items: baseline;
+            justify-content: center;
+            gap: 4px;
+            margin-bottom: 3px;
+        }
+
         .register-value {
             font-size: 1.4em;
             font-weight: bold;
-            margin-bottom: 3px;
+        }
+
+        .register-unit {
+            font-size: 0.8em;
         }
 
         .register-badge.voltage .register-value, .register-badge.current .register-value {
             font-size: 1.1em;
-            margin-bottom: 1px;
         }
 
 
@@ -1506,10 +1520,10 @@ def create_html_template():
                 <div class="register-badge ${badgeClass}" ${dataAttr}>
                     ${typeLabel}
                     <div class="register-name">${regData.description}</div>
-                    <div class="register-value ${valueClass}">
-                        ${regData.value}
+                    <div class="register-measure">
+                        <span class="register-value ${valueClass}">${regData.value}</span>
+                        <span class="register-unit">${regData.unit || ''}</span>
                     </div>
-                    <div class="register-unit">${regData.unit || ''}</div>
                 </div>
             `;
         }
