@@ -525,6 +525,29 @@
             margin-top: 10px;
         }
 
+        .machine-select {
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .machine-select label {
+            font-weight: 600;
+        }
+
+        .machine-select select {
+            padding: 6px 10px;
+            border-radius: 5px;
+            border: 1px solid #ced4da;
+        }
+
+        body.dark-mode .machine-select select {
+            background: #2a2a2a;
+            color: #f1f1f1;
+            border-color: #555;
+        }
+
         body.dark-mode {
             background: #121212;
             color: #f1f1f1;
@@ -566,6 +589,18 @@
         body.dark-mode .monitor-toggle:hover {
             background: #666;
         }
+
+        body.dark-mode .register-badge {
+            background: #333;
+            border-color: #555;
+            color: #f1f1f1;
+        }
+
+        body.dark-mode .register-badge.voltage { background: #4b2c31; }
+        body.dark-mode .register-badge.current { background: #21374d; }
+        body.dark-mode .register-badge.power { background: #1c3b25; }
+        body.dark-mode .register-badge.power_factor { background: #35294d; }
+        body.dark-mode .register-badge.other { background: #3a2e4d; }
     </style>
 </head>
 <body>
@@ -575,6 +610,10 @@
             <p>Real-time monitoring of energy meters from Excel configuration</p>
             <div class="theme-toggle">
                 <button class="refresh-all-btn" id="themeToggleBtn">🌓 Dark Mode</button>
+            </div>
+            <div class="machine-select">
+                <label for="machineSelect">Machine:</label>
+                <select id="machineSelect"></select>
             </div>
         </div>
 
@@ -1031,8 +1070,10 @@
             }
 
             loadConfiguration();
-            loadReadings();
-            
+            loadMachineList().then(loadReadings);
+
+            document.getElementById('machineSelect').addEventListener('change', loadReadings);
+
             // No automatic refresh - user controls all updates via buttons
         });
 
@@ -1084,15 +1125,39 @@
             }
         }
 
+        async function loadMachineList() {
+            const select = document.getElementById('machineSelect');
+            try {
+                const response = await fetch('/api/utilities_list');
+                const machines = await response.json();
+                select.innerHTML = '';
+                machines.forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m.id;
+                    opt.textContent = m.name;
+                    select.appendChild(opt);
+                });
+            } catch (error) {
+                console.error('Error loading machines:', error);
+            }
+        }
+
         async function loadReadings() {
             if (isRefreshing) return;
-            
+
+            const select = document.getElementById('machineSelect');
+            const utilityId = select.value || 'dummy';
+
             try {
-                const response = await fetch('/api/readings');
+                const response = await fetch(`/api/refresh_utility/${utilityId}`);
                 const data = await response.json();
-                
-                updateUI(data);
-                
+
+                if (data.success) {
+                    updateUI({ readings: { [utilityId]: data.utility_data }, last_update: data.timestamp, connection_status: data.utility_data.status });
+                } else {
+                    showError(data.error || 'Failed to load data');
+                }
+
             } catch (error) {
                 console.error('Error loading readings:', error);
                 showError('Failed to load readings. Please check connection.');
@@ -1115,40 +1180,16 @@
             
             lastUpdate.textContent = `Last Update: ${data.last_update || 'Never'}`;
             
-            // Update utilities grid
+            // Update utilities grid for a single utility
             const grid = document.getElementById('utilitiesGrid');
-            
+
             if (!data.readings || Object.keys(data.readings).length === 0) {
-                grid.innerHTML = `
-                    <div class="no-data">
-                        <h3>No data available</h3>
-                        <p>Click "Refresh All" to load readings from all utilities.</p>
-                    </div>
-                `;
+                grid.innerHTML = `<div class="no-data">No data available</div>`;
                 return;
             }
-            
-            // Check for utilities that no longer exist in the new configuration
-            const currentUtilityIds = Object.keys(data.readings);
-            const monitoredUtilityIds = Object.keys(monitoringIntervals);
-            
-            // Stop monitoring for utilities that no longer exist
-            monitoredUtilityIds.forEach(utilityId => {
-                if (!currentUtilityIds.includes(utilityId)) {
-                    console.log(`Stopping monitoring for removed utility: ${utilityId}`);
-                    clearInterval(monitoringIntervals[utilityId]);
-                    delete monitoringIntervals[utilityId];
-                }
-            });
-            
-            let html = '';
-            for (const [utilityId, utilityData] of Object.entries(data.readings)) {
-                html += createUtilityCard(utilityId, utilityData);
-            }
-            
-            grid.innerHTML = html;
-            
-            // Update monitoring count
+
+            const [utilityId, utilityData] = Object.entries(data.readings)[0];
+            grid.innerHTML = createUtilityCard(utilityId, utilityData);
             updateMonitoringCount();
         }
 
@@ -1339,13 +1380,8 @@
                         showSuccess(data.message);
                     }
                     
-                    updateUI({
-                        readings: data.readings,
-                        last_update: data.timestamp,
-                        connection_status: 'Configuration reloaded and refreshed',
-                        utilities_count: data.utilities_count,
-                        registers_count: data.registers_count
-                    });
+                    await loadMachineList();
+                    loadReadings();
                 } else {
                     showError(`Failed to refresh: ${data.error || 'Unknown error'}`);
                 }
