@@ -152,39 +152,6 @@
             background: #f39c12;
         }
 
-        .monitor-toggle {
-            background: #95a5a6;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: all 0.3s;
-            margin-left: 10px;
-            font-size: 0.9em;
-        }
-
-        .monitor-toggle:hover {
-            transform: scale(1.05);
-        }
-
-        .monitor-toggle.active {
-            background: #e74c3c;
-            animation: pulse 2s infinite;
-        }
-
-        .monitor-toggle.disabled {
-            background: #bdc3c7;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.7; }
-            100% { opacity: 1; }
-        }
 
         .utility-header-actions {
             display: flex;
@@ -578,15 +545,13 @@
         }
 
         body.dark-mode .refresh-btn,
-        body.dark-mode .refresh-all-btn,
-        body.dark-mode .monitor-toggle {
+        body.dark-mode .refresh-all-btn {
             background: #555;
             color: #f1f1f1;
         }
 
         body.dark-mode .refresh-btn:hover,
-        body.dark-mode .refresh-all-btn:hover,
-        body.dark-mode .monitor-toggle:hover {
+        body.dark-mode .refresh-all-btn:hover {
             background: #666;
         }
 
@@ -1084,11 +1049,9 @@
             }
 
             loadConfiguration();
-            loadMachineList().then(loadReadings);
+            loadMachineList().then(startAutoMonitoring);
 
-            document.getElementById('machineSelect').addEventListener('change', loadReadings);
-
-            // No automatic refresh - user controls all updates via buttons
+            document.getElementById('machineSelect').addEventListener('change', startAutoMonitoring);
         });
 
         // Cleanup monitoring intervals when page is closed
@@ -1149,7 +1112,6 @@
                 placeholder.value = '';
                 placeholder.textContent = 'Select machine...';
                 placeholder.disabled = true;
-                placeholder.selected = true;
                 select.appendChild(placeholder);
 
                 machines.forEach(m => {
@@ -1158,6 +1120,13 @@
                     opt.textContent = `Cabinet ${m.cabinet} Node ${m.node} - ${m.name}`;
                     select.appendChild(opt);
                 });
+
+                const dummy = machines.find(m => m.id.toLowerCase().includes('dummy'));
+                if (dummy) {
+                    select.value = dummy.id;
+                } else if (machines.length > 0) {
+                    select.value = machines[0].id;
+                }
             } catch (error) {
                 console.error('Error loading machines:', error);
             }
@@ -1183,6 +1152,22 @@
                 console.error('Error loading readings:', error);
                 showError('Failed to load readings. Please check connection.');
             }
+        }
+
+        async function startAutoMonitoring() {
+            await stopAllMonitoring();
+            await loadReadings();
+            const select = document.getElementById('machineSelect');
+            const utilityId = select.value || 'dummy';
+            toggleMonitoring(utilityId, null);
+        }
+
+        async function stopAllMonitoring() {
+            Object.keys(monitoringIntervals).forEach(id => {
+                clearInterval(monitoringIntervals[id]);
+                delete monitoringIntervals[id];
+            });
+            updateMonitoringCount();
         }
 
         function updateUI(data) {
@@ -1315,11 +1300,6 @@
                         <div class="utility-header-actions">
                             <button class="refresh-btn" onclick="refreshUtility('${utilityId}', this)">
                                 🔄 Refresh
-                            </button>
-                            <button class="monitor-toggle ${isMonitoring ? 'active' : ''}" 
-                                    onclick="toggleMonitoring('${utilityId}', this)"
-                                    title="${isMonitoring ? 'Stop continuous monitoring' : 'Start continuous monitoring (2s)'}">
-                                ${isMonitoring ? '🛑 Stop' : '🔴 Monitor'}
                             </button>
                         </div>
                     </div>
@@ -1580,7 +1560,7 @@
         }
 
         function toggleMonitoring(utilityId, button) {
-            if (button.disabled) return;
+            if (button && button.disabled) return;
             
             const isCurrentlyMonitoring = monitoringIntervals.hasOwnProperty(utilityId);
             
@@ -1589,9 +1569,11 @@
                 clearInterval(monitoringIntervals[utilityId]);
                 delete monitoringIntervals[utilityId];
                 
-                button.className = 'monitor-toggle';
-                button.textContent = '🔴 Monitor';
-                button.title = 'Start continuous monitoring (2s)';
+                if (button) {
+                    button.className = 'monitor-toggle';
+                    button.textContent = '🔴 Monitor';
+                    button.title = 'Start continuous monitoring (2s)';
+                }
                 
                 // Remove monitor status
                 const utilityCard = document.getElementById(`utility-${utilityId}`);
@@ -1624,9 +1606,11 @@
                 
             } else {
                 // Start monitoring
-                button.className = 'monitor-toggle active';
-                button.textContent = '🛑 Stop';
-                button.title = 'Stop continuous monitoring';
+                if (button) {
+                    button.className = 'monitor-toggle active';
+                    button.textContent = '🛑 Stop';
+                    button.title = 'Stop continuous monitoring';
+                }
                 
                 // Add monitor status
                 const utilityInfo = document.querySelector(`#utility-${utilityId} .utility-info`);
