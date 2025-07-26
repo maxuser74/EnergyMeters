@@ -837,7 +837,7 @@
                         radius: 2
                     },
                     line: {
-                        tension: 0.1
+                        tension: 0.4
                     }
                 }
             };
@@ -940,7 +940,9 @@
                             data: [],
                             ...chartConfig.voltage,
                             borderColor: `hsl(${index * 30}, 70%, 50%)`,
-                            backgroundColor: `hsla(${index * 30}, 70%, 50%, 0.1)`
+                            backgroundColor: `hsla(${index * 30}, 70%, 50%, 0.1)`,
+                            cubicInterpolationMode: 'monotone',
+                            tension: 0.4
                         };
                     }
                     chartData[utilityId].voltage.datasets[index].data.push(value);
@@ -964,7 +966,9 @@
                             data: [],
                             ...chartConfig.current,
                             borderColor: `hsl(${200 + index * 30}, 70%, 50%)`,
-                            backgroundColor: `hsla(${200 + index * 30}, 70%, 50%, 0.1)`
+                            backgroundColor: `hsla(${200 + index * 30}, 70%, 50%, 0.1)`,
+                            cubicInterpolationMode: 'monotone',
+                            tension: 0.4
                         };
                     }
                     chartData[utilityId].current.datasets[index].data.push(value);
@@ -995,7 +999,9 @@
                             data: [],
                             ...chartConfig.powerFactor,
                             borderColor: `hsl(${120 + index * 30}, 70%, 50%)`,
-                            backgroundColor: `hsla(${120 + index * 30}, 70%, 50%, 0.1)`
+                            backgroundColor: `hsla(${120 + index * 30}, 70%, 50%, 0.1)`,
+                            cubicInterpolationMode: 'monotone',
+                            tension: 0.4
                         };
                     }
                     chartData[utilityId].powerFactor.datasets[index].data.push(value);
@@ -1015,7 +1021,9 @@
                         data: [],
                         ...chartConfig.power,
                         borderColor: 'hsl(280,70%,50%)',
-                        backgroundColor: 'hsla(280,70%,50%,0.1)'
+                        backgroundColor: 'hsla(280,70%,50%,0.1)',
+                        cubicInterpolationMode: 'monotone',
+                        tension: 0.4
                     };
                 }
                 chartData[utilityId].power.datasets[0].data.push(powerData.Total);
@@ -1147,7 +1155,7 @@
                 machines.forEach(m => {
                     const opt = document.createElement('option');
                     opt.value = m.id;
-                    opt.textContent = m.name;
+                    opt.textContent = `Cabinet ${m.cabinet} Node ${m.node} - ${m.name}`;
                     select.appendChild(opt);
                 });
             } catch (error) {
