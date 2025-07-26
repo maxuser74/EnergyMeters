@@ -1,3 +1,4 @@
+import os
 #!/usr/bin/env python3
 """
 Energy Meter Web Server - Enhanced with Excel Configuration
@@ -22,6 +23,14 @@ import os
 app = Flask(__name__)
 
 # Global variables to store the latest readings
+# Global variables to store the latest readings
+MODE = 'PRODUCTION'  # Default
+if os.path.exists('env'):
+    with open('env', 'r') as f:
+        for line in f:
+            if line.strip().startswith('MODE'):
+                MODE = line.strip().split('=')[1].strip().upper()
+
 latest_readings = {}
 last_update_time = None
 connection_status = "Disconnected"
@@ -321,8 +330,101 @@ class ExcelBasedEnergyMeterReader:
         return utility_data
 
     def read_all_utilities(self):
-        """Read all utilities and update global readings. If none are available, add a dummy utility with example values."""
-        global latest_readings, last_update_time, connection_status, utilities_config
+        """Read all utilities and update global readings. If none are available, add a dummy utility with example values. In DUMMY mode, only use the dummy."""
+        global latest_readings, last_update_time, connection_status, utilities_config, MODE
+
+        if MODE == 'DUMMY':
+            print("DUMMY MODE: Only simulated data will be used.")
+            dummy_id = 'dummy_cabinet1_node1'
+            all_readings = {
+                dummy_id: {
+                    'id': dummy_id,
+                    'name': 'DEMO DUMMY MACHINE',
+                    'cabinet': 1,
+                    'node': 1,
+                    'ip_address': '127.0.0.1',
+                    'status': 'OK',
+                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'registers': {
+                        'voltage_L1': {
+                            'description': 'Voltage L1',
+                            'value': 400.2,
+                            'unit': 'V',
+                            'category': 'voltage',
+                            'status': 'OK'
+                        },
+                        'voltage_L2': {
+                            'description': 'Voltage L2',
+                            'value': 399.8,
+                            'unit': 'V',
+                            'category': 'voltage',
+                            'status': 'OK'
+                        },
+                        'voltage_L3': {
+                            'description': 'Voltage L3',
+                            'value': 401.1,
+                            'unit': 'V',
+                            'category': 'voltage',
+                            'status': 'OK'
+                        },
+                        'current_L1': {
+                            'description': 'Current L1',
+                            'value': 200.5,
+                            'unit': 'A',
+                            'category': 'current',
+                            'status': 'OK'
+                        },
+                        'current_L2': {
+                            'description': 'Current L2',
+                            'value': 198.7,
+                            'unit': 'A',
+                            'category': 'current',
+                            'status': 'OK'
+                        },
+                        'current_L3': {
+                            'description': 'Current L3',
+                            'value': 201.2,
+                            'unit': 'A',
+                            'category': 'current',
+                            'status': 'OK'
+                        },
+                        'power_factor_L1': {
+                            'description': 'Power Factor L1',
+                            'value': 0.91,
+                            'unit': '',
+                            'category': 'power_factor',
+                            'status': 'OK'
+                        },
+                        'power_factor_L2': {
+                            'description': 'Power Factor L2',
+                            'value': 0.89,
+                            'unit': '',
+                            'category': 'power_factor',
+                            'status': 'OK'
+                        },
+                        'power_factor_L3': {
+                            'description': 'Power Factor L3',
+                            'value': 0.92,
+                            'unit': '',
+                            'category': 'power_factor',
+                            'status': 'OK'
+                        }
+                    }
+                }
+            }
+            utilities_config = [{
+                'id': dummy_id,
+                'cabinet': 1,
+                'node': 1,
+                'utility_name': 'DEMO DUMMY MACHINE',
+                'ip_address': '127.0.0.1',
+                'port': 502
+            }]
+            connection_status = 'DEMO MODE: Dummy machine shown'
+            latest_readings = all_readings
+            last_update_time = datetime.now()
+            print("Completed reading: 1/1 utilities successful (dummy)")
+            return all_readings
 
         print(f"Reading all {len(utilities_config)} utilities...")
 
@@ -390,16 +492,30 @@ class ExcelBasedEnergyMeterReader:
                         'category': 'current',
                         'status': 'OK'
                     },
-                    'power_factor': {
-                        'description': 'Power Factor',
+                    'power_factor_L1': {
+                        'description': 'Power Factor L1',
                         'value': 0.91,
+                        'unit': '',
+                        'category': 'power_factor',
+                        'status': 'OK'
+                    },
+                    'power_factor_L2': {
+                        'description': 'Power Factor L2',
+                        'value': 0.89,
+                        'unit': '',
+                        'category': 'power_factor',
+                        'status': 'OK'
+                    },
+                    'power_factor_L3': {
+                        'description': 'Power Factor L3',
+                        'value': 0.92,
                         'unit': '',
                         'category': 'power_factor',
                         'status': 'OK'
                     }
                 }
             }
-            # Aggiorna anche utilities_config per la dashboard
+            # Aggiorna anche utilities_config per la dashboard, dummy in alto
             utilities_config = [{
                 'id': dummy_id,
                 'cabinet': 1,
