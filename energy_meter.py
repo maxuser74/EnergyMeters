@@ -769,7 +769,7 @@ def create_html_template():
             overflow-x: auto;
         }
 
-        .registers-grid.voltage-grid, .registers-grid.current-grid {
+        .registers-grid.voltage-grid, .registers-grid.current-grid, .registers-grid.power_factor-grid {
             gap: 6px;
         }
 
@@ -1425,7 +1425,7 @@ def create_html_template():
                     // Section CSS class
                     let sectionClass = `${cat}-section`;
                     // Grid class
-                    let gridClass = (cat === 'voltage' || cat === 'current') ? `${cat}-grid` : '';
+                    let gridClass = (cat === 'voltage' || cat === 'current' || cat === 'power_factor') ? `${cat}-grid` : '';
                     // Badge color class is the category name
                     registersHtml += `
                         <div class="readings-section ${sectionClass}">
