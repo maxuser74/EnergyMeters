@@ -37,15 +37,6 @@ connection_status = "Disconnected"
 utilities_config = []
 registers_config = {}
 
-# Utility list endpoint will append this dummy entry
-DUMMY_UTILITY = {
-    'id': 'dummy',
-    'cabinet': 1,
-    'node': 1,
-    'utility_name': 'DEMO DUMMY MACHINE',
-    'ip_address': '127.0.0.1',
-    'port': 502
-}
 
 class ExcelBasedEnergyMeterReader:
     def __init__(self):
@@ -68,20 +59,33 @@ class ExcelBasedEnergyMeterReader:
         try:
             df_utenze = pd.read_excel('Utenze.xlsx')
             utilities = []
-            
+
             # Cabinet IP mapping
             cabinet_ips = {
                 1: '192.168.156.75',
-                2: '192.168.156.76', 
+                2: '192.168.156.76',
                 3: '192.168.156.77'
             }
-            
+
             for _, row in df_utenze.iterrows():
                 cabinet = int(row['Cabinet'])
                 node = int(row['Nodo'])
                 utility_name = str(row['Utenza'])
+
+                if cabinet == 0:
+                    # Dummy utility - will use virtual data
+                    utilities.append({
+                        'id': f"dummy_cabinet0_node{node}",
+                        'cabinet': cabinet,
+                        'node': node,
+                        'utility_name': utility_name,
+                        'ip_address': '127.0.0.1',
+                        'port': 502
+                    })
+                    continue
+
                 ip_address = cabinet_ips.get(cabinet, None)
-                
+
                 if ip_address:
                     utilities.append({
                         'id': f"cabinet{cabinet}_node{node}",
@@ -93,7 +97,7 @@ class ExcelBasedEnergyMeterReader:
                     })
                 else:
                     print(f"WARNING: Unknown cabinet {cabinet} for utility {utility_name}")
-            
+
             print(f"Loaded {len(utilities)} utilities from Utenze.xlsx")
             return utilities
             
@@ -351,7 +355,7 @@ class ExcelBasedEnergyMeterReader:
                             'category': register_info.get('category', 'other')
                         }
                         utility_data['status'] = 'PARTIAL'
-                        
+
                 except Exception as e:
                     register_key = f"reg_{start_address}"
                     utility_data['registers'][register_key] = {
@@ -362,7 +366,36 @@ class ExcelBasedEnergyMeterReader:
                     }
                     utility_data['status'] = 'PARTIAL'
                     print(f"    Exception reading register {start_address}: {e}")
-            
+
+            # After reading all registers, calculate total power if possible
+            try:
+                volts = []
+                amps = []
+                pfs = []
+                for reg in utility_data['registers'].values():
+                    val = reg.get('value')
+                    if not isinstance(val, (int, float)):
+                        continue
+                    cat = reg.get('category')
+                    if cat == 'voltage':
+                        volts.append(val)
+                    elif cat == 'current':
+                        amps.append(val)
+                    elif cat == 'power_factor':
+                        pfs.append(val)
+
+                if len(volts) >= 3 and len(amps) >= 3 and len(pfs) >= 3:
+                    p_tot = (volts[0]*amps[0]*pfs[0] + volts[1]*amps[1]*pfs[1] + volts[2]*amps[2]*pfs[2]) / 1000
+                    utility_data['registers']['calculated_power'] = {
+                        'description': 'Calculated Power',
+                        'value': round(p_tot, 2),
+                        'unit': 'kW',
+                        'status': 'OK',
+                        'category': 'power'
+                    }
+            except Exception as calc_err:
+                print(f"    Error calculating power: {calc_err}")
+
         except Exception as e:
             utility_data['status'] = f'EXCEPTION: {str(e)[:50]}'
             print(f"Exception reading utility {utility_name}: {e}")
@@ -631,12 +664,6 @@ def utilities_list():
         }
         for u in utilities_config
     ]
-    utilities.append({
-        'id': DUMMY_UTILITY['id'],
-        'name': DUMMY_UTILITY['utility_name'],
-        'cabinet': DUMMY_UTILITY['cabinet'],
-        'node': DUMMY_UTILITY['node']
-    })
     return jsonify(utilities)
 
 @app.route('/api/readings')
@@ -702,9 +729,6 @@ def refresh_utility(utility_id):
         if u['id'] == utility_id:
             utility = u
             break
-
-    if utility_id == DUMMY_UTILITY['id']:
-        utility = DUMMY_UTILITY
 
     if not utility:
         print(f"Utility {utility_id} not found in current configuration - may have been removed")

@@ -601,6 +601,15 @@
         body.dark-mode .register-badge.power { background: #1c3b25; }
         body.dark-mode .register-badge.power_factor { background: #35294d; }
         body.dark-mode .register-badge.other { background: #3a2e4d; }
+
+        /* Ensure good contrast for text in dark mode */
+        body.dark-mode .register-name,
+        body.dark-mode .register-value,
+        body.dark-mode .register-unit,
+        body.dark-mode .utility-details,
+        body.dark-mode .no-data {
+            color: #f1f1f1;
+        }
     </style>
 </head>
 <body>
@@ -876,7 +885,8 @@
             }
 
             const now = new Date().toLocaleTimeString();
-            const maxDataPoints = 50; // Keep last 50 data points
+            // Keep roughly the last 30 seconds of data (2s interval)
+            const maxDataPoints = 15;
 
             // Prepare voltage, current and power factor data
             const voltageData = {};
@@ -961,16 +971,14 @@
                 });
             }
 
-            // Derive power from per-phase values
-            ['1','2','3'].forEach(ph => {
-                if (voltages[ph] && currents[ph] && pfs[ph]) {
-                    const kw = (voltages[ph] * currents[ph] * pfs[ph]) / 1000;
-                    powerData[`Phase ${ph}`] = parseFloat(kw.toFixed(2));
-                }
-            });
-            if (Object.keys(powerData).length === 3) {
-                const tot = Object.values(powerData).reduce((a,b) => a + b, 0);
-                powerData['Total'] = parseFloat(tot.toFixed(2));
+            // Calculate total power from the three phases only
+            if (voltages['1'] && voltages['2'] && voltages['3'] &&
+                currents['1'] && currents['2'] && currents['3'] &&
+                pfs['1'] && pfs['2'] && pfs['3']) {
+                const p1 = (voltages['1'] * currents['1'] * pfs['1']) / 1000;
+                const p2 = (voltages['2'] * currents['2'] * pfs['2']) / 1000;
+                const p3 = (voltages['3'] * currents['3'] * pfs['3']) / 1000;
+                powerData['Total'] = parseFloat((p1 + p2 + p3).toFixed(2));
             }
 
             // Update power factor chart data
@@ -994,25 +1002,23 @@
                 });
             }
 
-            // Update power chart data
-            if (Object.keys(powerData).length > 0) {
+            // Update power chart data (only total power)
+            if (powerData.Total !== undefined) {
                 if (chartData[utilityId].power.labels.length >= maxDataPoints) {
                     chartData[utilityId].power.labels.shift();
                     chartData[utilityId].power.datasets.forEach(d => d.data.shift());
                 }
                 chartData[utilityId].power.labels.push(now);
-                Object.entries(powerData).forEach(([description, value], index) => {
-                    if (!chartData[utilityId].power.datasets[index]) {
-                        chartData[utilityId].power.datasets[index] = {
-                            label: description,
-                            data: [],
-                            ...chartConfig.power,
-                            borderColor: `hsl(${280 + index * 30}, 70%, 50%)`,
-                            backgroundColor: `hsla(${280 + index * 30}, 70%, 50%, 0.1)`
-                        };
-                    }
-                    chartData[utilityId].power.datasets[index].data.push(value);
-                });
+                if (!chartData[utilityId].power.datasets[0]) {
+                    chartData[utilityId].power.datasets[0] = {
+                        label: 'Total Power',
+                        data: [],
+                        ...chartConfig.power,
+                        borderColor: 'hsl(280,70%,50%)',
+                        backgroundColor: 'hsla(280,70%,50%,0.1)'
+                    };
+                }
+                chartData[utilityId].power.datasets[0].data.push(powerData.Total);
             }
 
             // Update chart instances with error handling
