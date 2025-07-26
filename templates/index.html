@@ -326,6 +326,60 @@
             margin: 10px 0;
             border: 1px solid #c3e6cb;
         }
+
+        .theme-toggle {
+            text-align: right;
+            margin-top: 10px;
+        }
+
+        body.dark-mode {
+            background: #121212;
+            color: #f1f1f1;
+        }
+
+        body.dark-mode .container {
+            background: #1e1e1e;
+        }
+
+        body.dark-mode .connection-info,
+        body.dark-mode .card,
+        body.dark-mode .reading-group,
+        body.dark-mode .table-container {
+            background: #2a2a2a;
+            color: #f1f1f1;
+        }
+
+        body.dark-mode .data-table {
+            background: #2a2a2a;
+        }
+
+        body.dark-mode .data-table th {
+            background-color: #444;
+        }
+
+        body.dark-mode .data-table td,
+        body.dark-mode .data-table th {
+            border-color: #555;
+        }
+
+        body.dark-mode .tab {
+            color: #ccc;
+        }
+
+        body.dark-mode .tab.active {
+            background-color: #333;
+            border-bottom-color: #888;
+            color: #fff;
+        }
+
+        body.dark-mode .btn {
+            background: #555;
+            color: #f1f1f1;
+        }
+
+        body.dark-mode .btn:hover {
+            background: #666;
+        }
     </style>
 </head>
 <body>
@@ -334,6 +388,9 @@
             <h1>⚡ Energy Meter Monitor</h1>
             <div id="connection-info" class="connection-info">
                 <div class="loading">Loading connection info...</div>
+            </div>
+            <div class="theme-toggle">
+                <button class="btn" id="themeToggleBtn">🌓 Dark Mode</button>
             </div>
         </div>
         
@@ -392,6 +449,15 @@
     <script>
         let currentData = {};
         let cabinetData = [];
+
+        // Theme toggle
+        const themeBtn = document.getElementById('themeToggleBtn');
+        if (themeBtn) {
+            themeBtn.addEventListener('click', () => {
+                document.body.classList.toggle('dark-mode');
+                localStorage.setItem('darkMode', document.body.classList.contains('dark-mode'));
+            });
+        }
         
         // Tab switching functionality
         function switchTab(tabName) {
@@ -809,6 +875,10 @@
         
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
+            if (localStorage.getItem('darkMode') === 'true') {
+                document.body.classList.add('dark-mode');
+            }
+
             loadCabinetSelection();
             updateReadings();
             

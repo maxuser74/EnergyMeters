@@ -519,6 +519,53 @@
             margin: 20px 0;
             border: 1px solid #c3e6cb;
         }
+
+        .theme-toggle {
+            text-align: right;
+            margin-top: 10px;
+        }
+
+        body.dark-mode {
+            background: #121212;
+            color: #f1f1f1;
+        }
+
+        body.dark-mode .container {
+            background: #1e1e1e;
+        }
+
+        body.dark-mode .status-bar,
+        body.dark-mode .utility-card,
+        body.dark-mode .charts-container,
+        body.dark-mode .registers-container,
+        body.dark-mode .chart-section {
+            background: #2a2a2a;
+            color: #f1f1f1;
+        }
+
+        body.dark-mode .utility-header,
+        body.dark-mode .data-table th {
+            background: #444;
+            color: #f1f1f1;
+        }
+
+        body.dark-mode .data-table td,
+        body.dark-mode .data-table th {
+            border-color: #555;
+        }
+
+        body.dark-mode .refresh-btn,
+        body.dark-mode .refresh-all-btn,
+        body.dark-mode .monitor-toggle {
+            background: #555;
+            color: #f1f1f1;
+        }
+
+        body.dark-mode .refresh-btn:hover,
+        body.dark-mode .refresh-all-btn:hover,
+        body.dark-mode .monitor-toggle:hover {
+            background: #666;
+        }
     </style>
 </head>
 <body>
@@ -526,6 +573,9 @@
         <div class="header">
             <h1>🏭 Energy Meter Dashboard</h1>
             <p>Real-time monitoring of energy meters from Excel configuration</p>
+            <div class="theme-toggle">
+                <button class="refresh-all-btn" id="themeToggleBtn">🌓 Dark Mode</button>
+            </div>
         </div>
 
         <div class="status-bar">
@@ -560,6 +610,15 @@
         let monitoringIntervals = {}; // Store active monitoring intervals
         let chartInstances = {}; // Store chart instances for each utility
         let chartData = {}; // Store chart data history for each utility
+
+        // Theme toggle
+        const themeBtn = document.getElementById('themeToggleBtn');
+        if (themeBtn) {
+            themeBtn.addEventListener('click', () => {
+                document.body.classList.toggle('dark-mode');
+                localStorage.setItem('darkMode', document.body.classList.contains('dark-mode'));
+            });
+        }
 
         // Chart configuration
         const chartConfig = {
@@ -967,6 +1026,10 @@
 
         // Load initial data when page loads
         document.addEventListener('DOMContentLoaded', function() {
+            if (localStorage.getItem('darkMode') === 'true') {
+                document.body.classList.add('dark-mode');
+            }
+
             loadConfiguration();
             loadReadings();
             
