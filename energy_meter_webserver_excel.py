@@ -334,8 +334,24 @@ class ExcelBasedEnergyMeterReader:
         global latest_readings, last_update_time, connection_status, utilities_config, MODE
 
         if MODE == 'DUMMY':
+            import random
             print("DUMMY MODE: Only simulated data will be used.")
             dummy_id = 'dummy_cabinet1_node1'
+            # Generate random but realistic values for each refresh
+            v1 = round(random.uniform(398, 403), 1)
+            v2 = round(random.uniform(398, 403), 1)
+            v3 = round(random.uniform(398, 403), 1)
+            c1 = round(random.uniform(195, 205), 1)
+            c2 = round(random.uniform(195, 205), 1)
+            c3 = round(random.uniform(195, 205), 1)
+            pf1 = round(random.uniform(0.88, 0.93), 2)
+            pf2 = round(random.uniform(0.88, 0.93), 2)
+            pf3 = round(random.uniform(0.88, 0.93), 2)
+            # Active power per phase: P = V * I * PF
+            p1 = v1 * c1 * pf1
+            p2 = v2 * c2 * pf2
+            p3 = v3 * c3 * pf3
+            p_tot_kw = round((p1 + p2 + p3) / 1000, 2)  # kW
             all_readings = {
                 dummy_id: {
                     'id': dummy_id,
@@ -348,65 +364,72 @@ class ExcelBasedEnergyMeterReader:
                     'registers': {
                         'voltage_L1': {
                             'description': 'Voltage L1',
-                            'value': 400.2,
+                            'value': v1,
                             'unit': 'V',
                             'category': 'voltage',
                             'status': 'OK'
                         },
                         'voltage_L2': {
                             'description': 'Voltage L2',
-                            'value': 399.8,
+                            'value': v2,
                             'unit': 'V',
                             'category': 'voltage',
                             'status': 'OK'
                         },
                         'voltage_L3': {
                             'description': 'Voltage L3',
-                            'value': 401.1,
+                            'value': v3,
                             'unit': 'V',
                             'category': 'voltage',
                             'status': 'OK'
                         },
                         'current_L1': {
                             'description': 'Current L1',
-                            'value': 200.5,
+                            'value': c1,
                             'unit': 'A',
                             'category': 'current',
                             'status': 'OK'
                         },
                         'current_L2': {
                             'description': 'Current L2',
-                            'value': 198.7,
+                            'value': c2,
                             'unit': 'A',
                             'category': 'current',
                             'status': 'OK'
                         },
                         'current_L3': {
                             'description': 'Current L3',
-                            'value': 201.2,
+                            'value': c3,
                             'unit': 'A',
                             'category': 'current',
                             'status': 'OK'
                         },
                         'power_factor_L1': {
                             'description': 'Power Factor L1',
-                            'value': 0.91,
+                            'value': pf1,
                             'unit': '',
                             'category': 'power_factor',
                             'status': 'OK'
                         },
                         'power_factor_L2': {
                             'description': 'Power Factor L2',
-                            'value': 0.89,
+                            'value': pf2,
                             'unit': '',
                             'category': 'power_factor',
                             'status': 'OK'
                         },
                         'power_factor_L3': {
                             'description': 'Power Factor L3',
-                            'value': 0.92,
+                            'value': pf3,
                             'unit': '',
                             'category': 'power_factor',
+                            'status': 'OK'
+                        },
+                        'active_power': {
+                            'description': 'Active Power',
+                            'value': p_tot_kw,
+                            'unit': 'kW',
+                            'category': 'active_power',
                             'status': 'OK'
                         }
                     }
