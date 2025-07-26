@@ -37,6 +37,16 @@ connection_status = "Disconnected"
 utilities_config = []
 registers_config = {}
 
+# Utility list endpoint will append this dummy entry
+DUMMY_UTILITY = {
+    'id': 'dummy',
+    'cabinet': 1,
+    'node': 1,
+    'utility_name': 'DEMO DUMMY MACHINE',
+    'ip_address': '127.0.0.1',
+    'port': 502
+}
+
 class ExcelBasedEnergyMeterReader:
     def __init__(self):
         self.load_configuration()
@@ -604,9 +614,16 @@ energy_reader = ExcelBasedEnergyMeterReader()
 @app.route('/')
 def index():
     """Main dashboard page"""
-    return render_template('energy_dashboard.html', 
+    return render_template('energy_dashboard.html',
                          utilities=utilities_config,
                          registers=registers_config)
+
+# Return available utilities for the dropdown selection
+@app.route('/api/utilities_list')
+def utilities_list():
+    utilities = [{'id': u['id'], 'name': u['utility_name']} for u in utilities_config]
+    utilities.append({'id': DUMMY_UTILITY['id'], 'name': DUMMY_UTILITY['utility_name']})
+    return jsonify(utilities)
 
 @app.route('/api/readings')
 def get_readings():
@@ -665,16 +682,20 @@ def refresh_utility(utility_id):
     global latest_readings
     
     # Find the utility configuration
+
     utility = None
     for u in utilities_config:
         if u['id'] == utility_id:
             utility = u
             break
-    
+
+    if utility_id == DUMMY_UTILITY['id']:
+        utility = DUMMY_UTILITY
+
     if not utility:
         print(f"Utility {utility_id} not found in current configuration - may have been removed")
         return jsonify({
-            'success': False, 
+            'success': False,
             'error': 'Utility not found in current configuration. Try refreshing all to reload configuration.',
             'suggestion': 'reload_config'
         }), 404
