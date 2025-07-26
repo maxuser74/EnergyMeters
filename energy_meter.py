@@ -104,14 +104,7 @@ class ExcelBasedEnergyMeterReader:
                 target_unit = str(row['Convert to']) if 'Convert to' in row else source_unit
                 # Use 'Type' column for grouping, fallback to Lettura if missing
                 if 'Type' in df_registri.columns and pd.notna(row['Type']):
-                    category = str(row['Type']).strip().lower()
-                    category = category.replace(' ', '_').replace('/', '_')
-                    if category == 'currents':
-                        category = 'current'
-                    elif category == 'voltages':
-                        category = 'voltage'
-                    elif category == 'power_factors':
-                        category = 'power_factor'
+                    category = str(row['Type']).strip().replace(' ', '_').replace('/', '_').lower()
                 else:
                     category = description.strip().replace(' ', '_').replace('/', '_').lower()
                 # Calculate register count and start address based on data type
@@ -303,7 +296,8 @@ class ExcelBasedEnergyMeterReader:
                         'description': register_info['description'],
                         'value': 'ERROR',
                         'unit': register_info.get('target_unit', ''),
-                        'status': 'ERROR'
+                        'status': 'ERROR',
+                        'category': register_info.get('category', 'other')
                     }
                     utility_data['status'] = 'PARTIAL'
                     print(f"    Exception reading register {start_address}: {e}")
@@ -321,104 +315,32 @@ class ExcelBasedEnergyMeterReader:
         return utility_data
 
     def read_all_utilities(self):
-        """Read all utilities and update global readings. If none are available, add a dummy utility with example values."""
-        global latest_readings, last_update_time, connection_status, utilities_config
-
+        """Read all utilities and update global readings"""
+        global latest_readings, last_update_time, connection_status
+        
         print(f"Reading all {len(utilities_config)} utilities...")
-
+        
         all_readings = {}
         successful_count = 0
-
+        
         for utility in utilities_config:
             utility_data = self.read_single_utility(utility)
             all_readings[utility_data['id']] = utility_data
+            
             if utility_data['status'] in ['OK', 'PARTIAL']:
                 successful_count += 1
-
-        # Se nessuna utility reale è disponibile, aggiungi una dummy anche a utilities_config
-        if not all_readings or all(v['status'] != 'OK' for v in all_readings.values()):
-            print("No real readings available, adding dummy utility for demo.")
-            dummy_id = 'dummy_cabinet1_node1'
-            all_readings[dummy_id] = {
-                'id': dummy_id,
-                'name': 'DEMO DUMMY MACHINE',
-                'cabinet': 1,
-                'node': 1,
-                'ip_address': '127.0.0.1',
-                'status': 'OK',
-                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'registers': {
-                    'voltage_L1': {
-                        'description': 'Voltage L1',
-                        'value': 400.2,
-                        'unit': 'V',
-                        'category': 'voltage',
-                        'status': 'OK'
-                    },
-                    'voltage_L2': {
-                        'description': 'Voltage L2',
-                        'value': 399.8,
-                        'unit': 'V',
-                        'category': 'voltage',
-                        'status': 'OK'
-                    },
-                    'voltage_L3': {
-                        'description': 'Voltage L3',
-                        'value': 401.1,
-                        'unit': 'V',
-                        'category': 'voltage',
-                        'status': 'OK'
-                    },
-                    'current_L1': {
-                        'description': 'Current L1',
-                        'value': 200.5,
-                        'unit': 'A',
-                        'category': 'current',
-                        'status': 'OK'
-                    },
-                    'current_L2': {
-                        'description': 'Current L2',
-                        'value': 198.7,
-                        'unit': 'A',
-                        'category': 'current',
-                        'status': 'OK'
-                    },
-                    'current_L3': {
-                        'description': 'Current L3',
-                        'value': 201.2,
-                        'unit': 'A',
-                        'category': 'current',
-                        'status': 'OK'
-                    },
-                    'power_factor': {
-                        'description': 'Power Factor',
-                        'value': 0.91,
-                        'unit': '',
-                        'category': 'power_factor',
-                        'status': 'OK'
-                    }
-                }
-            }
-            # Aggiorna anche utilities_config per la dashboard
-            utilities_config = [{
-                'id': dummy_id,
-                'cabinet': 1,
-                'node': 1,
-                'utility_name': 'DEMO DUMMY MACHINE',
-                'ip_address': '127.0.0.1',
-                'port': 502
-            }]
-            connection_status = 'DEMO MODE: Dummy machine shown'
-        elif successful_count > 0:
-            connection_status = f"Connected ({successful_count}/{len(utilities_config)} utilities)"
-        else:
-            connection_status = "All connections failed"
-
+        
         # Update global variables
         latest_readings = all_readings
         last_update_time = datetime.now()
-
+        
+        if successful_count > 0:
+            connection_status = f"Connected ({successful_count}/{len(utilities_config)} utilities)"
+        else:
+            connection_status = "All connections failed"
+        
         print(f"Completed reading: {successful_count}/{len(utilities_config)} utilities successful")
+        
         return all_readings
 
 # Initialize the energy meter reader
@@ -830,13 +752,8 @@ def create_html_template():
             color: white;
         }
 
-        .power-section .section-title {
+        .energy-section .section-title {
             background: linear-gradient(135deg, #27ae60, #229954);
-            color: white;
-        }
-
-        .power_factor-section .section-title {
-            background: linear-gradient(135deg, #f1c40f, #f39c12);
             color: white;
         }
 
@@ -846,13 +763,13 @@ def create_html_template():
         }
 
         .registers-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            display: flex;
+            flex-wrap: nowrap;
             gap: 10px;
+            overflow-x: auto;
         }
 
         .registers-grid.voltage-grid, .registers-grid.current-grid {
-            grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
             gap: 6px;
         }
 
@@ -864,6 +781,10 @@ def create_html_template():
             text-align: center;
             transition: all 0.3s ease;
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
         }
 
         .register-badge.voltage, .register-badge.current {
@@ -888,15 +809,25 @@ def create_html_template():
             margin-bottom: 4px;
         }
 
+        .register-measure {
+            display: flex;
+            align-items: baseline;
+            justify-content: center;
+            gap: 4px;
+            margin-bottom: 3px;
+        }
+
         .register-value {
             font-size: 1.4em;
             font-weight: bold;
-            margin-bottom: 3px;
+        }
+
+        .register-unit {
+            font-size: 0.8em;
         }
 
         .register-badge.voltage .register-value, .register-badge.current .register-value {
             font-size: 1.1em;
-            margin-bottom: 1px;
         }
 
 
@@ -910,14 +841,9 @@ def create_html_template():
             background: linear-gradient(135deg, #f0f8ff, #e6f3ff);
         }
 
-        .register-badge.power {
+        .register-badge.energy {
             border-color: #27ae60;
             background: linear-gradient(135deg, #f0fff4, #e6ffed);
-        }
-
-        .register-badge.power_factor {
-            border-color: #8e44ad;
-            background: linear-gradient(135deg, #f5e6ff, #f3e8ff);
         }
 
         .register-badge.other {
@@ -937,6 +863,10 @@ def create_html_template():
         .register-badge.temperature {
             border-color: #16a085;
             background: linear-gradient(135deg, #e6fffa, #e0f7fa);
+        }
+        .register-badge.power_factor {
+            border-color: #8e44ad;
+            background: linear-gradient(135deg, #f5e6ff, #f3e8ff);
         }
         /* Generic fallback for any unknown category: use HSL based on category name hash */
         .register-badge[data-category] {
@@ -1463,15 +1393,17 @@ def create_html_template():
             const isMonitoring = monitoringIntervals.hasOwnProperty(utilityId);
             let registersHtml = '';
             if (utilityData.registers && Object.keys(utilityData.registers).length > 0) {
-                // Dynamically categorize registers by their category field
+                // Dynamically categorize registers by their category field (no 'other' fallback)
                 const categories = {};
                 for (const [regKey, regData] of Object.entries(utilityData.registers)) {
-                    let cat = regData.category || 'other';
-                    if (!categories[cat]) categories[cat] = [];
-                    categories[cat].push({key: regKey, data: regData});
+                    if (regData.category) {
+                        let cat = regData.category;
+                        if (!categories[cat]) categories[cat] = [];
+                        categories[cat].push({key: regKey, data: regData});
+                    }
                 }
-                // Sort categories using register 'Type' values
-                const mainOrder = ['voltage', 'current', 'power', 'power_factor'];
+                // Sort categories: voltage, current, energy, then others alphabetically
+                const mainOrder = ['voltage', 'current', 'energy'];
                 const allCats = Object.keys(categories);
                 const sortedCats = [
                     ...mainOrder.filter(c => allCats.includes(c)),
@@ -1488,8 +1420,7 @@ def create_html_template():
                     let icon = '';
                     if (cat === 'voltage') icon = '⚡';
                     else if (cat === 'current') icon = '🔌';
-                    else if (cat === 'power') icon = '🔋';
-                    else if (cat === 'power_factor') icon = '📐';
+                    else if (cat === 'energy') icon = '🔋';
                     else icon = '📊';
                     // Section CSS class
                     let sectionClass = `${cat}-section`;
@@ -1577,7 +1508,7 @@ def create_html_template():
             const valueClass = regData.status === 'OK' ? '' : 'error';
             // Add data-category for dynamic coloring
             let dataAttr = '';
-            if (regData.status === 'OK' && !['voltage','current','power','power_factor','other'].includes(category)) {
+            if (regData.status === 'OK' && !['voltage','current','energy','other'].includes(category)) {
                 dataAttr = `data-category="${category}"`;
             }
             // Show the type/category in the badge for clarity
@@ -1589,10 +1520,10 @@ def create_html_template():
                 <div class="register-badge ${badgeClass}" ${dataAttr}>
                     ${typeLabel}
                     <div class="register-name">${regData.description}</div>
-                    <div class="register-value ${valueClass}">
-                        ${regData.value}
+                    <div class="register-measure">
+                        <span class="register-value ${valueClass}">${regData.value}</span>
+                        <span class="register-unit">${regData.unit || ''}</span>
                     </div>
-                    <div class="register-unit">${regData.unit || ''}</div>
                 </div>
             `;
         }
@@ -1965,6 +1896,8 @@ def create_html_template():
     print("HTML template created: templates/energy_dashboard.html")
 
 if __name__ == '__main__':
+    # Avvia il server Flask sulla porta 5050
+    app.run(host='0.0.0.0', port=5050, debug=True)
     print("Energy Meter Web Server - Excel Configuration Based")
     print("=" * 60)
     print()
@@ -1988,6 +1921,6 @@ if __name__ == '__main__':
     print()
     
     try:
-        app.run(host='0.0.0.0', port=5050, debug=False, threaded=True)
+        app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
     except KeyboardInterrupt:
         print("\nServer stopped by user")
