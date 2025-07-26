@@ -238,6 +238,14 @@
             background: linear-gradient(135deg, #3498db, #2980b9);
         }
 
+        .chart-title.powerFactor {
+            background: linear-gradient(135deg, #2ecc71, #27ae60);
+        }
+
+        .chart-title.power {
+            background: linear-gradient(135deg, #9b59b6, #8e44ad);
+        }
+
         .chart-canvas {
             height: 200px;
         }
@@ -564,21 +572,33 @@
                 backgroundColor: 'rgba(52, 152, 219, 0.1)',
                 borderColor: 'rgba(52, 152, 219, 1)',
                 pointBackgroundColor: 'rgba(52, 152, 219, 1)'
+            },
+            powerFactor: {
+                backgroundColor: 'rgba(46, 204, 113, 0.1)',
+                borderColor: 'rgba(46, 204, 113, 1)',
+                pointBackgroundColor: 'rgba(46, 204, 113, 1)'
+            },
+            power: {
+                backgroundColor: 'rgba(155, 89, 182, 0.1)',
+                borderColor: 'rgba(155, 89, 182, 1)',
+                pointBackgroundColor: 'rgba(155, 89, 182, 1)'
             }
         };
 
         function initializeCharts(utilityId) {
             // Initialize chart data storage for this utility
-            if (!chartData[utilityId]) {
-                chartData[utilityId] = {
-                    voltage: { labels: [], datasets: [] },
-                    current: { labels: [], datasets: [] }
-                };
-            }
+        if (!chartData[utilityId]) {
+            chartData[utilityId] = {
+                voltage: { labels: [], datasets: [] },
+                current: { labels: [], datasets: [] },
+                powerFactor: { labels: [], datasets: [] },
+                power: { labels: [], datasets: [] }
+            };
+        }
 
             // Initialize chart instances
             if (!chartInstances[utilityId]) {
-                chartInstances[utilityId] = { voltage: null, current: null };
+                chartInstances[utilityId] = { voltage: null, current: null, powerFactor: null, power: null };
             }
 
             // Create voltage chart
@@ -625,7 +645,53 @@
                     });
                     console.log(`Current chart initialized for ${utilityId}`);
                 } catch (e) {
-                    console.error(`Error creating current chart for ${utilityId}:`, e);
+                console.error(`Error creating current chart for ${utilityId}:`, e);
+            }
+        }
+
+            // Create power factor chart
+            const pfCanvas = document.getElementById(`pf-chart-${utilityId}`);
+            if (pfCanvas) {
+                if (chartInstances[utilityId].powerFactor) {
+                    try {
+                        chartInstances[utilityId].powerFactor.destroy();
+                    } catch (e) {
+                        console.log(`Error destroying PF chart for ${utilityId}:`, e);
+                    }
+                }
+
+                try {
+                    chartInstances[utilityId].powerFactor = new Chart(pfCanvas, {
+                        type: 'line',
+                        data: chartData[utilityId].powerFactor,
+                        options: getChartOptions('Power Factor')
+                    });
+                    console.log(`Power factor chart initialized for ${utilityId}`);
+                } catch (e) {
+                    console.error(`Error creating PF chart for ${utilityId}:`, e);
+                }
+            }
+
+            // Create power chart
+            const powerCanvas = document.getElementById(`power-chart-${utilityId}`);
+            if (powerCanvas) {
+                if (chartInstances[utilityId].power) {
+                    try {
+                        chartInstances[utilityId].power.destroy();
+                    } catch (e) {
+                        console.log(`Error destroying power chart for ${utilityId}:`, e);
+                    }
+                }
+
+                try {
+                    chartInstances[utilityId].power = new Chart(powerCanvas, {
+                        type: 'line',
+                        data: chartData[utilityId].power,
+                        options: getChartOptions('Power (kW)')
+                    });
+                    console.log(`Power chart initialized for ${utilityId}`);
+                } catch (e) {
+                    console.error(`Error creating power chart for ${utilityId}:`, e);
                 }
             }
         }
@@ -674,6 +740,8 @@
             if (chartData[utilityId]) {
                 chartData[utilityId].voltage = { labels: [], datasets: [] };
                 chartData[utilityId].current = { labels: [], datasets: [] };
+                chartData[utilityId].powerFactor = { labels: [], datasets: [] };
+                chartData[utilityId].power = { labels: [], datasets: [] };
             }
 
             if (chartInstances[utilityId]) {
@@ -685,6 +753,14 @@
                     chartInstances[utilityId].current.data = chartData[utilityId].current;
                     chartInstances[utilityId].current.update();
                 }
+                if (chartInstances[utilityId].powerFactor) {
+                    chartInstances[utilityId].powerFactor.data = chartData[utilityId].powerFactor;
+                    chartInstances[utilityId].powerFactor.update();
+                }
+                if (chartInstances[utilityId].power) {
+                    chartInstances[utilityId].power.data = chartData[utilityId].power;
+                    chartInstances[utilityId].power.update();
+                }
             }
         }
 
@@ -692,9 +768,11 @@
             if (!chartData[utilityId] || !utilityData.registers) return;
 
             // Check if chart instances exist
-            if (!chartInstances[utilityId] || 
-                !chartInstances[utilityId].voltage || 
-                !chartInstances[utilityId].current) {
+            if (!chartInstances[utilityId] ||
+                !chartInstances[utilityId].voltage ||
+                !chartInstances[utilityId].current ||
+                !chartInstances[utilityId].powerFactor ||
+                !chartInstances[utilityId].power) {
                 console.log(`Chart instances missing for ${utilityId}, skipping update`);
                 return;
             }
@@ -702,9 +780,14 @@
             const now = new Date().toLocaleTimeString();
             const maxDataPoints = 50; // Keep last 50 data points
 
-            // Prepare voltage and current data
+            // Prepare voltage, current and power factor data
             const voltageData = {};
             const currentData = {};
+            const pfData = {};
+            const powerData = {};
+            const voltages = {};
+            const currents = {};
+            const pfs = {};
 
             // Extract voltage and current values
             for (const [regKey, regData] of Object.entries(utilityData.registers)) {
@@ -712,12 +795,23 @@
                 const unit = (regData.unit || '').toLowerCase();
                 const value = parseFloat(regData.value);
 
-                if (!isNaN(value)) {
-                    if (description.includes('voltage') || description.includes('tensione') || unit === 'v') {
-                        voltageData[regData.description] = value;
-                    } else if (description.includes('current') || description.includes('corrente') || unit === 'a') {
-                        currentData[regData.description] = value;
-                    }
+                if (isNaN(value)) continue;
+
+                let phase = null;
+                const phaseMatch = description.match(/l(\d)/);
+                if (phaseMatch) phase = phaseMatch[1];
+
+                if (description.includes('voltage') || description.includes('tensione') || unit === 'v') {
+                    voltageData[regData.description] = value;
+                    if (phase) voltages[phase] = value;
+                } else if (description.includes('current') || description.includes('corrente') || unit === 'a') {
+                    currentData[regData.description] = value;
+                    if (phase) currents[phase] = value;
+                } else if (description.includes('power factor') || description.includes('fattore di potenza')) {
+                    pfData[regData.description] = value;
+                    if (phase) pfs[phase] = value;
+                } else if (description.includes('power')) {
+                    powerData[regData.description] = value;
                 }
             }
 
@@ -769,6 +863,60 @@
                 });
             }
 
+            // Derive power from per-phase values
+            ['1','2','3'].forEach(ph => {
+                if (voltages[ph] && currents[ph] && pfs[ph]) {
+                    const kw = (voltages[ph] * currents[ph] * pfs[ph]) / 1000;
+                    powerData[`Phase ${ph}`] = parseFloat(kw.toFixed(2));
+                }
+            });
+            if (Object.keys(powerData).length === 3) {
+                const tot = Object.values(powerData).reduce((a,b) => a + b, 0);
+                powerData['Total'] = parseFloat(tot.toFixed(2));
+            }
+
+            // Update power factor chart data
+            if (Object.keys(pfData).length > 0) {
+                if (chartData[utilityId].powerFactor.labels.length >= maxDataPoints) {
+                    chartData[utilityId].powerFactor.labels.shift();
+                    chartData[utilityId].powerFactor.datasets.forEach(d => d.data.shift());
+                }
+                chartData[utilityId].powerFactor.labels.push(now);
+                Object.entries(pfData).forEach(([description, value], index) => {
+                    if (!chartData[utilityId].powerFactor.datasets[index]) {
+                        chartData[utilityId].powerFactor.datasets[index] = {
+                            label: description,
+                            data: [],
+                            ...chartConfig.powerFactor,
+                            borderColor: `hsl(${120 + index * 30}, 70%, 50%)`,
+                            backgroundColor: `hsla(${120 + index * 30}, 70%, 50%, 0.1)`
+                        };
+                    }
+                    chartData[utilityId].powerFactor.datasets[index].data.push(value);
+                });
+            }
+
+            // Update power chart data
+            if (Object.keys(powerData).length > 0) {
+                if (chartData[utilityId].power.labels.length >= maxDataPoints) {
+                    chartData[utilityId].power.labels.shift();
+                    chartData[utilityId].power.datasets.forEach(d => d.data.shift());
+                }
+                chartData[utilityId].power.labels.push(now);
+                Object.entries(powerData).forEach(([description, value], index) => {
+                    if (!chartData[utilityId].power.datasets[index]) {
+                        chartData[utilityId].power.datasets[index] = {
+                            label: description,
+                            data: [],
+                            ...chartConfig.power,
+                            borderColor: `hsl(${280 + index * 30}, 70%, 50%)`,
+                            backgroundColor: `hsla(${280 + index * 30}, 70%, 50%, 0.1)`
+                        };
+                    }
+                    chartData[utilityId].power.datasets[index].data.push(value);
+                });
+            }
+
             // Update chart instances with error handling
             try {
                 if (chartInstances[utilityId].voltage && chartInstances[utilityId].voltage.canvas) {
@@ -789,6 +937,28 @@
             } catch (e) {
                 console.error(`Error updating current chart for ${utilityId}:`, e);
                 // Try to reinitialize the chart
+                setTimeout(() => {
+                    initializeCharts(utilityId);
+                }, 100);
+            }
+
+            try {
+                if (chartInstances[utilityId].powerFactor && chartInstances[utilityId].powerFactor.canvas) {
+                    chartInstances[utilityId].powerFactor.update('none');
+                }
+            } catch (e) {
+                console.error(`Error updating PF chart for ${utilityId}:`, e);
+                setTimeout(() => {
+                    initializeCharts(utilityId);
+                }, 100);
+            }
+
+            try {
+                if (chartInstances[utilityId].power && chartInstances[utilityId].power.canvas) {
+                    chartInstances[utilityId].power.update('none');
+                }
+            } catch (e) {
+                console.error(`Error updating power chart for ${utilityId}:`, e);
                 setTimeout(() => {
                     initializeCharts(utilityId);
                 }, 100);
@@ -980,6 +1150,18 @@
                                     <div class="chart-title current">🔌 Current</div>
                                     <div class="chart-canvas">
                                         <canvas id="current-chart-${utilityId}"></canvas>
+                                    </div>
+                                </div>
+                                <div class="chart-section">
+                                    <div class="chart-title powerFactor">📐 Power Factor</div>
+                                    <div class="chart-canvas">
+                                        <canvas id="pf-chart-${utilityId}"></canvas>
+                                    </div>
+                                </div>
+                                <div class="chart-section">
+                                    <div class="chart-title power">🔋 Power</div>
+                                    <div class="chart-canvas">
+                                        <canvas id="power-chart-${utilityId}"></canvas>
                                     </div>
                                 </div>
                             </div>
@@ -1196,6 +1378,18 @@
                                                         <canvas id="current-chart-${utilityId}"></canvas>
                                                     </div>
                                                 </div>
+                                                <div class="chart-section">
+                                                    <div class="chart-title powerFactor">📐 Power Factor</div>
+                                                    <div class="chart-canvas">
+                                                        <canvas id="pf-chart-${utilityId}"></canvas>
+                                                    </div>
+                                                </div>
+                                                <div class="chart-section">
+                                                    <div class="chart-title power">🔋 Power</div>
+                                                    <div class="chart-canvas">
+                                                        <canvas id="power-chart-${utilityId}"></canvas>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                     `;
@@ -1210,6 +1404,8 @@
                                 // Charts exist, check if chart instances are still valid
                                 const voltageCanvas = document.getElementById(`voltage-chart-${utilityId}`);
                                 const currentCanvas = document.getElementById(`current-chart-${utilityId}`);
+                                const pfCanvas = document.getElementById(`pf-chart-${utilityId}`);
+                                const powerCanvas = document.getElementById(`power-chart-${utilityId}`);
                                 
                                 if (voltageCanvas && (!chartInstances[utilityId] || !chartInstances[utilityId].voltage)) {
                                     console.log(`Voltage chart instance missing for ${utilityId}, reinitializing...`);
@@ -1218,6 +1414,16 @@
                                     }, 100);
                                 } else if (currentCanvas && (!chartInstances[utilityId] || !chartInstances[utilityId].current)) {
                                     console.log(`Current chart instance missing for ${utilityId}, reinitializing...`);
+                                    setTimeout(() => {
+                                        initializeCharts(utilityId);
+                                    }, 100);
+                                } else if (pfCanvas && (!chartInstances[utilityId] || !chartInstances[utilityId].powerFactor)) {
+                                    console.log(`PF chart instance missing for ${utilityId}, reinitializing...`);
+                                    setTimeout(() => {
+                                        initializeCharts(utilityId);
+                                    }, 100);
+                                } else if (powerCanvas && (!chartInstances[utilityId] || !chartInstances[utilityId].power)) {
+                                    console.log(`Power chart instance missing for ${utilityId}, reinitializing...`);
                                     setTimeout(() => {
                                         initializeCharts(utilityId);
                                     }, 100);
@@ -1331,6 +1537,18 @@
                                     <div class="chart-title current">🔌 Current</div>
                                     <div class="chart-canvas">
                                         <canvas id="current-chart-${utilityId}"></canvas>
+                                    </div>
+                                </div>
+                                <div class="chart-section">
+                                    <div class="chart-title powerFactor">📐 Power Factor</div>
+                                    <div class="chart-canvas">
+                                        <canvas id="pf-chart-${utilityId}"></canvas>
+                                    </div>
+                                </div>
+                                <div class="chart-section">
+                                    <div class="chart-title power">🔋 Power</div>
+                                    <div class="chart-canvas">
+                                        <canvas id="power-chart-${utilityId}"></canvas>
                                     </div>
                                 </div>
                             </div>
