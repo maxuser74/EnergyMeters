@@ -1007,7 +1007,7 @@ def create_html_template():
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
         }
 
-        .register-badge.voltage, .register-badge.current {
+        .register-badge.voltage, .register-badge.current, .register-badge.power_factor {
             padding: 5px;
         }
 
@@ -1023,7 +1023,7 @@ def create_html_template():
             justify-content: center;
         }
 
-        .register-badge.voltage .register-name, .register-badge.current .register-name {
+        .register-badge.voltage .register-name, .register-badge.current .register-name, .register-badge.power_factor .register-name {
             font-size: 0.65em;
             min-height: 24px;
             margin-bottom: 4px;
@@ -1035,7 +1035,7 @@ def create_html_template():
             margin-bottom: 3px;
         }
 
-        .register-badge.voltage .register-value, .register-badge.current .register-value {
+        .register-badge.voltage .register-value, .register-badge.current .register-value, .register-badge.power_factor .register-value {
             font-size: 1.1em;
             margin-bottom: 1px;
         }
