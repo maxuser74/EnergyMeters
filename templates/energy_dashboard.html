@@ -1131,6 +1131,13 @@
                 const response = await fetch('/api/utilities_list');
                 const machines = await response.json();
                 select.innerHTML = '';
+                const placeholder = document.createElement('option');
+                placeholder.value = '';
+                placeholder.textContent = 'Select machine...';
+                placeholder.disabled = true;
+                placeholder.selected = true;
+                select.appendChild(placeholder);
+
                 machines.forEach(m => {
                     const opt = document.createElement('option');
                     opt.value = m.id;

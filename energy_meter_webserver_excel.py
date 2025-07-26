@@ -621,8 +621,22 @@ def index():
 # Return available utilities for the dropdown selection
 @app.route('/api/utilities_list')
 def utilities_list():
-    utilities = [{'id': u['id'], 'name': u['utility_name']} for u in utilities_config]
-    utilities.append({'id': DUMMY_UTILITY['id'], 'name': DUMMY_UTILITY['utility_name']})
+    """Return utilities for dropdown selection including cabinet and node."""
+    utilities = [
+        {
+            'id': u['id'],
+            'name': u['utility_name'],
+            'cabinet': u['cabinet'],
+            'node': u['node']
+        }
+        for u in utilities_config
+    ]
+    utilities.append({
+        'id': DUMMY_UTILITY['id'],
+        'name': DUMMY_UTILITY['utility_name'],
+        'cabinet': DUMMY_UTILITY['cabinet'],
+        'node': DUMMY_UTILITY['node']
+    })
     return jsonify(utilities)
 
 @app.route('/api/readings')
