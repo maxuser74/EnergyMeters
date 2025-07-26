@@ -429,7 +429,9 @@ class ExcelBasedEnergyMeterReader:
                             'description': 'Active Power',
                             'value': p_tot_kw,
                             'unit': 'kW',
-                            'category': 'active_power',
+                            # Use the general power category so the badge
+                            # styling matches existing power metrics
+                            'category': 'power',
                             'status': 'OK'
                         }
                     }

@@ -252,6 +252,20 @@
             padding: 20px;
         }
 
+        /* Grid to arrange the main reading groups */
+        .category-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-bottom: 25px;
+        }
+
+        @media (max-width: 768px) {
+            .category-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
         .readings-section {
             margin-bottom: 25px;
         }
@@ -917,47 +931,35 @@
                     if (!categories[cat]) categories[cat] = [];
                     categories[cat].push({key: regKey, data: regData});
                 }
-                // Sort categories using register 'Type' values
-                const mainOrder = ['voltage', 'current', 'power', 'power_factor'];
-                const allCats = Object.keys(categories);
-                const sortedCats = [
-                    ...mainOrder.filter(c => allCats.includes(c)),
-                    ...allCats.filter(c => !mainOrder.includes(c)).sort()
-                ];
-                // Responsive row: try to fit as many as possible on one row, wrap if needed
+                // Arrange categories in a fixed 2x2 grid
+                const mainOrder = ['voltage', 'current', 'power_factor', 'power'];
                 registersHtml = '<div class="registers-container">';
-                registersHtml += '<div class="voltage-current-row">';
-                let rowCount = 0;
-                let rowOpen = false;
-                let maxPerRow = 3; // Adjust for layout, can be made dynamic
-                sortedCats.forEach((cat, idx) => {
-                    // Section title and icon
+                registersHtml += '<div class="category-grid">';
+
+                mainOrder.forEach(cat => {
+                    if (!categories[cat]) return;
+
                     let icon = '';
                     if (cat === 'voltage') icon = '⚡';
                     else if (cat === 'current') icon = '🔌';
                     else if (cat === 'power') icon = '🔋';
                     else if (cat === 'power_factor') icon = '📐';
                     else icon = '📊';
-                    // Section CSS class
+
                     let sectionClass = `${cat}-section`;
-                    // Grid class
                     let gridClass = (cat === 'voltage' || cat === 'current') ? `${cat}-grid` : '';
-                    // Badge color class is the category name
+
                     registersHtml += `
                         <div class="readings-section ${sectionClass}">
-                            <div class="section-title">${icon} ${cat.replace(/_/g, ' ').replace(/\w/g, l => l.toUpperCase())} Readings</div>
+                            <div class="section-title">${icon} ${cat.replace(/_/g, ' ').replace(/\\b\\w/g, l => l.toUpperCase())} Readings</div>
                             <div class="registers-grid ${gridClass}">
                     `;
                     for (const reg of categories[cat]) {
                         registersHtml += createRegisterBadge(reg.data, cat);
                     }
                     registersHtml += '</div></div>';
-                    rowCount++;
-                    // If more than maxPerRow, close row and start new
-                    if ((rowCount % maxPerRow === 0) && (idx < sortedCats.length - 1)) {
-                        registersHtml += '</div><div class="voltage-current-row">';
-                    }
                 });
+
                 registersHtml += '</div>';
                 registersHtml += '</div>';
                 // Add charts section if monitoring is active
