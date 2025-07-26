@@ -260,7 +260,43 @@ class ExcelBasedEnergyMeterReader:
         node_id = utility['node']
         
         print(f"Reading utility: {utility_name} (IP: {ip_address}, Node: {node_id})")
-        
+
+        # In dummy mode generate simulated data without connecting
+        if MODE == 'DUMMY' or 'dummy' in utility_id.lower():
+            import random
+            v1 = round(random.uniform(398, 403), 1)
+            v2 = round(random.uniform(398, 403), 1)
+            v3 = round(random.uniform(398, 403), 1)
+            c1 = round(random.uniform(195, 205), 1)
+            c2 = round(random.uniform(195, 205), 1)
+            c3 = round(random.uniform(195, 205), 1)
+            pf1 = round(random.uniform(0.88, 0.93), 2)
+            pf2 = round(random.uniform(0.88, 0.93), 2)
+            pf3 = round(random.uniform(0.88, 0.93), 2)
+            p_tot_kw = round((v1 * c1 * pf1 + v2 * c2 * pf2 + v3 * c3 * pf3) / 1000, 2)
+
+            return {
+                'id': utility_id,
+                'name': utility_name,
+                'cabinet': utility['cabinet'],
+                'node': node_id,
+                'ip_address': ip_address,
+                'status': 'OK',
+                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'registers': {
+                    'voltage_L1': {'description': 'Voltage L1', 'value': v1, 'unit': 'V', 'category': 'voltage', 'status': 'OK'},
+                    'voltage_L2': {'description': 'Voltage L2', 'value': v2, 'unit': 'V', 'category': 'voltage', 'status': 'OK'},
+                    'voltage_L3': {'description': 'Voltage L3', 'value': v3, 'unit': 'V', 'category': 'voltage', 'status': 'OK'},
+                    'current_L1': {'description': 'Current L1', 'value': c1, 'unit': 'A', 'category': 'current', 'status': 'OK'},
+                    'current_L2': {'description': 'Current L2', 'value': c2, 'unit': 'A', 'category': 'current', 'status': 'OK'},
+                    'current_L3': {'description': 'Current L3', 'value': c3, 'unit': 'A', 'category': 'current', 'status': 'OK'},
+                    'power_factor_L1': {'description': 'Power Factor L1', 'value': pf1, 'unit': '', 'category': 'power_factor', 'status': 'OK'},
+                    'power_factor_L2': {'description': 'Power Factor L2', 'value': pf2, 'unit': '', 'category': 'power_factor', 'status': 'OK'},
+                    'power_factor_L3': {'description': 'Power Factor L3', 'value': pf3, 'unit': '', 'category': 'power_factor', 'status': 'OK'},
+                    'active_power': {'description': 'Active Power', 'value': p_tot_kw, 'unit': 'kW', 'category': 'power', 'status': 'OK'}
+                }
+            }
+
         # Create Modbus TCP client
         client = ModbusTcpClient(ip_address, port=port, timeout=3)
         
@@ -687,11 +723,18 @@ def background_reading_thread():
 
 # Create the HTML template directory and file
 def create_html_template():
-    """Create the HTML template for the dashboard"""
-    
+    """Create the HTML template for the dashboard.
+    If the template already exists, leave it untouched so custom
+    modifications are preserved."""
+
     # Create templates directory if it doesn't exist
     os.makedirs('templates', exist_ok=True)
-    
+
+    template_path = 'templates/energy_dashboard.html'
+    if os.path.exists(template_path):
+        print("HTML template exists, skipping creation")
+        return
+
     html_content = '''<!DOCTYPE html>
 <html lang="en">
 <head>
