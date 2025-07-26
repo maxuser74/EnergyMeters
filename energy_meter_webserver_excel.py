@@ -2215,18 +2215,9 @@ if __name__ == '__main__':
     # Create HTML template
     create_html_template()
     
-    # Perform initial reading in background thread (one time only)
-    print("Performing initial reading of all utilities (startup only)...")
-    bg_thread = threading.Thread(target=background_reading_thread, daemon=True)
-    bg_thread.start()
-    
-    # Wait for initial reading to complete
-    bg_thread.join(timeout=10)  # Wait max 10 seconds for initial reading
-    
     print(f"\nStarting web server on http://localhost:5000")
     print(f"Configuration: {len(utilities_config)} utilities, {len(registers_config)} registers")
     print("📋 Use 'Refresh All' or individual 'Refresh' buttons to update readings")
-    print("🔴 Use 'Monitor' buttons for real-time monitoring (2s intervals)")
     print("Press Ctrl+C to stop the server")
     print()
     
