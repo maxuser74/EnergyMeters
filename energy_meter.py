@@ -42,6 +42,51 @@ class ExcelBasedEnergyMeterReader:
     def __init__(self):
         self.load_configuration()
         
+    def generate_dummy_data(self, utility_id='dummy_cabinet1_node1', utility_name='DEMO DUMMY MACHINE', 
+                           cabinet=1, node=1, ip_address='127.0.0.1', use_random=True):
+        """Generate dummy utility data for testing/demo purposes"""
+        if use_random:
+            # Generate random but realistic values
+            v1 = round(random.uniform(398, 403), 1)
+            v2 = round(random.uniform(398, 403), 1)
+            v3 = round(random.uniform(398, 403), 1)
+            c1 = round(random.uniform(195, 205), 1)
+            c2 = round(random.uniform(195, 205), 1)
+            c3 = round(random.uniform(195, 205), 1)
+            pf1 = round(random.uniform(0.88, 0.93), 2)
+            pf2 = round(random.uniform(0.88, 0.93), 2)
+            pf3 = round(random.uniform(0.88, 0.93), 2)
+        else:
+            # Use fixed values for consistency
+            v1, v2, v3 = 400.2, 399.8, 401.1
+            c1, c2, c3 = 200.5, 198.7, 201.2
+            pf1, pf2, pf3 = 0.91, 0.89, 0.92
+        
+        # Calculate total power
+        p_tot_kw = round((v1 * c1 * pf1 + v2 * c2 * pf2 + v3 * c3 * pf3) / 1000, 2)
+        
+        return {
+            'id': utility_id,
+            'name': utility_name,
+            'cabinet': cabinet,
+            'node': node,
+            'ip_address': ip_address,
+            'status': 'OK',
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'registers': {
+                'voltage_L1': {'description': 'Voltage L1', 'value': v1, 'unit': 'V', 'category': 'voltage', 'status': 'OK'},
+                'voltage_L2': {'description': 'Voltage L2', 'value': v2, 'unit': 'V', 'category': 'voltage', 'status': 'OK'},
+                'voltage_L3': {'description': 'Voltage L3', 'value': v3, 'unit': 'V', 'category': 'voltage', 'status': 'OK'},
+                'current_L1': {'description': 'Current L1', 'value': c1, 'unit': 'A', 'category': 'current', 'status': 'OK'},
+                'current_L2': {'description': 'Current L2', 'value': c2, 'unit': 'A', 'category': 'current', 'status': 'OK'},
+                'current_L3': {'description': 'Current L3', 'value': c3, 'unit': 'A', 'category': 'current', 'status': 'OK'},
+                'power_factor_L1': {'description': 'Power Factor L1', 'value': pf1, 'unit': '', 'category': 'power_factor', 'status': 'OK'},
+                'power_factor_L2': {'description': 'Power Factor L2', 'value': pf2, 'unit': '', 'category': 'power_factor', 'status': 'OK'},
+                'power_factor_L3': {'description': 'Power Factor L3', 'value': pf3, 'unit': '', 'category': 'power_factor', 'status': 'OK'},
+                'active_power': {'description': 'Active Power', 'value': p_tot_kw, 'unit': 'kW', 'category': 'power', 'status': 'OK'}
+            }
+        }
+        
     def load_configuration(self):
         """Load configuration from Excel files"""
         global utilities_config, registers_config
@@ -361,40 +406,29 @@ class ExcelBasedEnergyMeterReader:
         
         print(f"Reading utility: {utility_name} (IP: {ip_address}, Node: {node_id})")
 
-        # In dummy mode generate simulated data without connecting
-        if MODE == 'DUMMY' or 'dummy' in utility_id.lower():
-            v1 = round(random.uniform(398, 403), 1)
-            v2 = round(random.uniform(398, 403), 1)
-            v3 = round(random.uniform(398, 403), 1)
-            c1 = round(random.uniform(195, 205), 1)
-            c2 = round(random.uniform(195, 205), 1)
-            c3 = round(random.uniform(195, 205), 1)
-            pf1 = round(random.uniform(0.88, 0.93), 2)
-            pf2 = round(random.uniform(0.88, 0.93), 2)
-            pf3 = round(random.uniform(0.88, 0.93), 2)
-            p_tot_kw = round((v1 * c1 * pf1 + v2 * c2 * pf2 + v3 * c3 * pf3) / 1000, 2)
-
-            return {
-                'id': utility_id,
-                'name': utility_name,
-                'cabinet': utility['cabinet'],
-                'node': node_id,
-                'ip_address': ip_address,
-                'status': 'OK',
-                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'registers': {
-                    'voltage_L1': {'description': 'Voltage L1', 'value': v1, 'unit': 'V', 'category': 'voltage', 'status': 'OK'},
-                    'voltage_L2': {'description': 'Voltage L2', 'value': v2, 'unit': 'V', 'category': 'voltage', 'status': 'OK'},
-                    'voltage_L3': {'description': 'Voltage L3', 'value': v3, 'unit': 'V', 'category': 'voltage', 'status': 'OK'},
-                    'current_L1': {'description': 'Current L1', 'value': c1, 'unit': 'A', 'category': 'current', 'status': 'OK'},
-                    'current_L2': {'description': 'Current L2', 'value': c2, 'unit': 'A', 'category': 'current', 'status': 'OK'},
-                    'current_L3': {'description': 'Current L3', 'value': c3, 'unit': 'A', 'category': 'current', 'status': 'OK'},
-                    'power_factor_L1': {'description': 'Power Factor L1', 'value': pf1, 'unit': '', 'category': 'power_factor', 'status': 'OK'},
-                    'power_factor_L2': {'description': 'Power Factor L2', 'value': pf2, 'unit': '', 'category': 'power_factor', 'status': 'OK'},
-                    'power_factor_L3': {'description': 'Power Factor L3', 'value': pf3, 'unit': '', 'category': 'power_factor', 'status': 'OK'},
-                    'active_power': {'description': 'Active Power', 'value': p_tot_kw, 'unit': 'kW', 'category': 'power', 'status': 'OK'}
-                }
-            }
+        # Only generate simulated data for machines with Group = "Dummy" or in explicit DUMMY mode
+        gruppo = utility.get('gruppo', '').strip().lower() if utility.get('gruppo') else ''
+        
+        if MODE == 'DUMMY':
+            print(f"🧪 GLOBAL TEST MODE: Generating simulated data for {utility_name}")
+            return self.generate_dummy_data(
+                utility_id=utility_id,
+                utility_name=f"[TEST] {utility_name}",
+                cabinet=utility['cabinet'],
+                node=node_id,
+                ip_address=ip_address,
+                use_random=True
+            )
+        elif gruppo == 'dummy':
+            print(f"🎲 Dummy Group machine: {utility_name} - generating random data")
+            return self.generate_dummy_data(
+                utility_id=utility_id,
+                utility_name=f"[DUMMY] {utility_name}",
+                cabinet=utility['cabinet'],
+                node=node_id,
+                ip_address=ip_address,
+                use_random=True
+            )
 
         # Create Modbus TCP client with timeout
         client = ModbusTcpClient(ip_address, port=port, timeout=5)
@@ -517,120 +551,32 @@ class ExcelBasedEnergyMeterReader:
         global latest_readings, last_update_time, connection_status, utilities_config, MODE
 
         if MODE == 'DUMMY':
-            print("DUMMY MODE: Only simulated data will be used.")
-            dummy_id = 'dummy_cabinet1_node1'
-            # Generate random but realistic values for each refresh
-            v1 = round(random.uniform(398, 403), 1)
-            v2 = round(random.uniform(398, 403), 1)
-            v3 = round(random.uniform(398, 403), 1)
-            c1 = round(random.uniform(195, 205), 1)
-            c2 = round(random.uniform(195, 205), 1)
-            c3 = round(random.uniform(195, 205), 1)
-            pf1 = round(random.uniform(0.88, 0.93), 2)
-            pf2 = round(random.uniform(0.88, 0.93), 2)
-            pf3 = round(random.uniform(0.88, 0.93), 2)
-            # Active power per phase: P = V * I * PF
-            p1 = v1 * c1 * pf1
-            p2 = v2 * c2 * pf2
-            p3 = v3 * c3 * pf3
-            p_tot_kw = round((p1 + p2 + p3) / 1000, 2)  # kW
-            all_readings = {
-                dummy_id: {
-                    'id': dummy_id,
-                    'name': 'DEMO DUMMY MACHINE',
-                    'cabinet': 1,
-                    'node': 1,
-                    'ip_address': '127.0.0.1',
-                    'status': 'OK',
-                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    'registers': {
-                        'voltage_L1': {
-                            'description': 'Voltage L1',
-                            'value': v1,
-                            'unit': 'V',
-                            'category': 'voltage',
-                            'status': 'OK'
-                        },
-                        'voltage_L2': {
-                            'description': 'Voltage L2',
-                            'value': v2,
-                            'unit': 'V',
-                            'category': 'voltage',
-                            'status': 'OK'
-                        },
-                        'voltage_L3': {
-                            'description': 'Voltage L3',
-                            'value': v3,
-                            'unit': 'V',
-                            'category': 'voltage',
-                            'status': 'OK'
-                        },
-                        'current_L1': {
-                            'description': 'Current L1',
-                            'value': c1,
-                            'unit': 'A',
-                            'category': 'current',
-                            'status': 'OK'
-                        },
-                        'current_L2': {
-                            'description': 'Current L2',
-                            'value': c2,
-                            'unit': 'A',
-                            'category': 'current',
-                            'status': 'OK'
-                        },
-                        'current_L3': {
-                            'description': 'Current L3',
-                            'value': c3,
-                            'unit': 'A',
-                            'category': 'current',
-                            'status': 'OK'
-                        },
-                        'power_factor_L1': {
-                            'description': 'Power Factor L1',
-                            'value': pf1,
-                            'unit': '',
-                            'category': 'power_factor',
-                            'status': 'OK'
-                        },
-                        'power_factor_L2': {
-                            'description': 'Power Factor L2',
-                            'value': pf2,
-                            'unit': '',
-                            'category': 'power_factor',
-                            'status': 'OK'
-                        },
-                        'power_factor_L3': {
-                            'description': 'Power Factor L3',
-                            'value': pf3,
-                            'unit': '',
-                            'category': 'power_factor',
-                            'status': 'OK'
-                        },
-                        'active_power': {
-                            'description': 'Active Power',
-                            'value': p_tot_kw,
-                            'unit': 'kW',
-                            # Use the general power category so the badge
-                            # styling matches existing power metrics
-                            'category': 'power',
-                            'status': 'OK'
-                        }
-                    }
-                }
-            }
+            print("🧪 GLOBAL DUMMY MODE: All machines will generate simulated data for testing")
+            print("⚠️  This overrides individual Group settings - switch to PRODUCTION mode for mixed real/dummy")
+            dummy_id = 'global_test_machine'
+            dummy_data = self.generate_dummy_data(
+                utility_id=dummy_id,
+                utility_name='[GLOBAL TEST] ALL SIMULATED',
+                cabinet=1,
+                node=1,
+                ip_address='127.0.0.1',
+                use_random=True
+            )
+            
+            all_readings = {dummy_id: dummy_data}
             utilities_config = [{
                 'id': dummy_id,
                 'cabinet': 1,
                 'node': 1,
-                'utility_name': 'DEMO DUMMY MACHINE',
+                'utility_name': '[GLOBAL TEST] ALL SIMULATED',
+                'gruppo': 'test',
                 'ip_address': '127.0.0.1',
                 'port': 502
             }]
-            connection_status = 'DEMO MODE: Dummy machine shown'
+            connection_status = '🧪 GLOBAL TEST MODE: All data simulated - Not real field data!'
             latest_readings = all_readings
             last_update_time = datetime.now()
-            print("Completed reading: 1/1 utilities successful (dummy)")
+            print("⚠️  Global test mode: 1/1 simulated utilities (NOT REAL DATA)")
             return all_readings
 
         print(f"Reading all {len(utilities_config)} utilities...")
@@ -644,98 +590,47 @@ class ExcelBasedEnergyMeterReader:
             if utility_data['status'] in ['OK', 'PARTIAL']:
                 successful_count += 1
 
-        # Se nessuna utility reale è disponibile, aggiungi una dummy anche a utilities_config
-        if not all_readings or all(v['status'] != 'OK' for v in all_readings.values()):
-            print("No real readings available, adding dummy utility for demo.")
-            dummy_id = 'dummy_cabinet1_node1'
-            all_readings[dummy_id] = {
-                'id': dummy_id,
-                'name': 'DEMO DUMMY MACHINE',
-                'cabinet': 1,
-                'node': 1,
-                'ip_address': '127.0.0.1',
-                'status': 'OK',
-                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'registers': {
-                    'voltage_L1': {
-                        'description': 'Voltage L1',
-                        'value': 400.2,
-                        'unit': 'V',
-                        'category': 'voltage',
-                        'status': 'OK'
-                    },
-                    'voltage_L2': {
-                        'description': 'Voltage L2',
-                        'value': 399.8,
-                        'unit': 'V',
-                        'category': 'voltage',
-                        'status': 'OK'
-                    },
-                    'voltage_L3': {
-                        'description': 'Voltage L3',
-                        'value': 401.1,
-                        'unit': 'V',
-                        'category': 'voltage',
-                        'status': 'OK'
-                    },
-                    'current_L1': {
-                        'description': 'Current L1',
-                        'value': 200.5,
-                        'unit': 'A',
-                        'category': 'current',
-                        'status': 'OK'
-                    },
-                    'current_L2': {
-                        'description': 'Current L2',
-                        'value': 198.7,
-                        'unit': 'A',
-                        'category': 'current',
-                        'status': 'OK'
-                    },
-                    'current_L3': {
-                        'description': 'Current L3',
-                        'value': 201.2,
-                        'unit': 'A',
-                        'category': 'current',
-                        'status': 'OK'
-                    },
-                    'power_factor_L1': {
-                        'description': 'Power Factor L1',
-                        'value': 0.91,
-                        'unit': '',
-                        'category': 'power_factor',
-                        'status': 'OK'
-                    },
-                    'power_factor_L2': {
-                        'description': 'Power Factor L2',
-                        'value': 0.89,
-                        'unit': '',
-                        'category': 'power_factor',
-                        'status': 'OK'
-                    },
-                    'power_factor_L3': {
-                        'description': 'Power Factor L3',
-                        'value': 0.92,
-                        'unit': '',
-                        'category': 'power_factor',
-                        'status': 'OK'
-                    }
-                }
-            }
-            # Aggiorna anche utilities_config per la dashboard, dummy in alto
-            utilities_config = [{
-                'id': dummy_id,
-                'cabinet': 1,
-                'node': 1,
-                'utility_name': 'DEMO DUMMY MACHINE',
-                'ip_address': '127.0.0.1',
-                'port': 502
-            }]
-            connection_status = 'DEMO MODE: Dummy machine shown'
-        elif successful_count > 0:
-            connection_status = f"Connected ({successful_count}/{len(utilities_config)} utilities)"
-        else:
-            connection_status = "All connections failed"
+        # Count successful readings (including dummy group machines)
+        real_device_count = 0
+        dummy_group_count = 0
+        
+        for utility_id, utility_data in all_readings.items():
+            if utility_data['status'] in ['OK', 'PARTIAL']:
+                # Check if this is a dummy group machine
+                utility_config = next((u for u in utilities_config if u['id'] == utility_id), None)
+                if utility_config and utility_config.get('gruppo', '').strip().lower() == 'dummy':
+                    dummy_group_count += 1
+                else:
+                    real_device_count += 1
+        
+        total_successful = real_device_count + dummy_group_count
+        
+        # Set connection status based on results
+        if total_successful == 0:
+            connection_status = "No devices responding - Check connections and configuration"
+            print("❌ No utilities could be read successfully (including dummy group machines)")
+        elif real_device_count == 0 and dummy_group_count > 0:
+            connection_status = f"Only dummy group machines responding ({dummy_group_count} dummy)"
+            print(f"⚠️  Only dummy group machines are providing data ({dummy_group_count} dummy, 0 real)")
+        elif real_device_count > 0:
+            if dummy_group_count > 0:
+                connection_status = f"Connected ({real_device_count} real, {dummy_group_count} dummy)"
+                print(f"✅ Mixed success: {real_device_count} real devices, {dummy_group_count} dummy group machines")
+            else:
+                connection_status = f"Connected ({real_device_count} real devices)"
+                print(f"✅ Real devices connected: {real_device_count} utilities successful")
+        
+        # Provide guidance if no real devices are responding (but still return all data including dummy)
+        if real_device_count == 0 and dummy_group_count == 0:
+            print("⚠️  No readings available from any devices!")
+            print("📋 Please check:")
+            print("   - Network connectivity to the Modbus devices") 
+            print("   - Device IP addresses in Utenze.xlsx are correct")
+            print("   - Devices are powered on and responding")
+            print("   - Modbus TCP service is running on the devices")
+        elif real_device_count == 0 and dummy_group_count > 0:
+            print("⚠️  No real field devices responding - only dummy group machines active")
+            print("📋 Check real device connectivity while dummy machines provide test data")
 
         # Update global variables
         latest_readings = all_readings
@@ -775,13 +670,54 @@ def get_readings():
     """API endpoint to get all current readings"""
     global latest_readings, last_update_time, connection_status
     
-    return jsonify({
+    # Analyze the type of data we have
+    has_real_data = False
+    has_dummy_group_data = False
+    
+    if latest_readings:
+        for utility_id, reading in latest_readings.items():
+            if reading.get('status') in ['OK', 'PARTIAL']:
+                # Check if this is a dummy group machine
+                utility_config = next((u for u in utilities_config if u['id'] == utility_id), None)
+                if utility_config and utility_config.get('gruppo', '').strip().lower() == 'dummy':
+                    has_dummy_group_data = True
+                else:
+                    has_real_data = True
+    
+    response_data = {
         'readings': latest_readings,
         'last_update': last_update_time.strftime('%Y-%m-%d %H:%M:%S') if last_update_time else None,
         'connection_status': connection_status,
         'utilities_count': len(utilities_config),
-        'registers_count': len(registers_config)
-    })
+        'registers_count': len(registers_config),
+        'has_real_data': has_real_data,
+        'has_dummy_group_data': has_dummy_group_data
+    }
+    
+    # Add guidance based on data availability
+    if not has_real_data and not has_dummy_group_data and MODE != 'DUMMY':
+        response_data['guidance'] = {
+            'message': 'No devices are responding (real or dummy group)',
+            'suggestions': [
+                'Check network connectivity to Modbus devices',
+                'Verify IP addresses in Utenze.xlsx are correct', 
+                'Ensure real devices are powered on and functioning',
+                'Confirm Modbus TCP service is running on devices',
+                'Check if any machines should have Group="Dummy" for test data'
+            ]
+        }
+    elif not has_real_data and has_dummy_group_data and MODE != 'DUMMY':
+        response_data['guidance'] = {
+            'message': 'Only dummy group machines are providing data',
+            'suggestions': [
+                'Real field devices are not responding',
+                'Check network connectivity to real Modbus devices',
+                'Dummy group machines are working as expected (random data)',
+                'Verify real device IP addresses and network settings'
+            ]
+        }
+    
+    return jsonify(response_data)
 
 @app.route('/api/refresh_machines')
 def refresh_machines():
@@ -818,7 +754,6 @@ def refresh_utility(utility_id):
     global latest_readings
     
     # Find the utility configuration
-
     utility = None
     for u in utilities_config:
         if u['id'] == utility_id:
@@ -2343,10 +2278,28 @@ if __name__ == '__main__':
     print(f"\n✅ Configuration loaded:")
     print(f"   📊 {len(utilities_config)} utilities")
     print(f"   📋 {len(registers_config)} registers")
-    print(f"   🔧 Mode: {MODE}")
+    
+    # Count dummy group machines
+    dummy_count = sum(1 for u in utilities_config if u.get('gruppo', '').strip().lower() == 'dummy')
+    real_count = len(utilities_config) - dummy_count
+    
+    if MODE == 'DUMMY':
+        print(f"   🧪 Mode: {MODE} (GLOBAL TEST - ALL DATA SIMULATED)")
+        print("   ⚠️  Switch to PRODUCTION mode for real device readings")
+    else:
+        print(f"   🔧 Mode: {MODE} (Mixed real/dummy based on Group column)")
+        print(f"   📡 Real devices: {real_count}, Dummy group: {dummy_count}")
+        if dummy_count > 0:
+            print("   🎲 Machines with Group='Dummy' will generate random data")
+        print("   📶 Other machines will connect to real field devices")
     
     print(f"\n🌐 Starting web server on http://localhost:5050")
-    print("📋 Use 'Refresh All' or individual 'Refresh' buttons to update readings")
+    if MODE != 'DUMMY':
+        print("📋 Use 'Refresh Machines' or individual 'Refresh' buttons to update readings")
+        print("🎲 Dummy group machines provide random data, others require real connections")
+        print("⚠️  If real devices don't respond, check network connectivity and configuration")
+    else:
+        print("🧪 Global test mode - all machines will show simulated data")
     print("⏹️  Press Ctrl+C to stop the server")
     print()
     
