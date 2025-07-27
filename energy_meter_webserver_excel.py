@@ -1,4 +1,3 @@
-import os
 #!/usr/bin/env python3
 """
 Energy Meter Web Server - Enhanced with Excel Configuration
@@ -8,17 +7,18 @@ Displays energy meter readings in a web interface using configuration from Excel
 Features individual machine refresh buttons and real-time updates
 """
 
+import os
+import struct
+import time
+import threading
+import json
+import random
+import pandas as pd
+from datetime import datetime
 from flask import Flask, render_template, jsonify, request
 from pymodbus.constants import Endian
 from pymodbus.client import ModbusTcpClient
 from pymodbus.exceptions import ConnectionException
-import struct
-import time
-from datetime import datetime
-import threading
-import json
-import pandas as pd
-import os
 
 app = Flask(__name__)
 
@@ -57,7 +57,19 @@ class ExcelBasedEnergyMeterReader:
     def load_utilities_from_excel(self):
         """Load utilities configuration from Utenze.xlsx"""
         try:
+            if not os.path.exists('Utenze.xlsx'):
+                print("ERROR: Utenze.xlsx file not found!")
+                return []
+                
             df_utenze = pd.read_excel('Utenze.xlsx')
+            
+            # Validate required columns
+            required_columns = ['Cabinet', 'Nodo', 'Utenza']
+            missing_columns = [col for col in required_columns if col not in df_utenze.columns]
+            if missing_columns:
+                print(f"ERROR: Missing required columns in Utenze.xlsx: {missing_columns}")
+                return []
+            
             utilities = []
 
             # Cabinet IP mapping
@@ -67,46 +79,58 @@ class ExcelBasedEnergyMeterReader:
                 3: '192.168.156.77'
             }
 
-            for _, row in df_utenze.iterrows():
-                cabinet = int(row['Cabinet'])
-                node = int(row['Nodo'])
-                utility_name = str(row['Utenza'])
-                gruppo = str(row['Gruppo']) if 'Gruppo' in row and not pd.isna(row['Gruppo']) else None
+            for idx, row in df_utenze.iterrows():
+                try:
+                    cabinet = int(row['Cabinet'])
+                    node = int(row['Nodo'])
+                    utility_name = str(row['Utenza']).strip()
+                    gruppo = str(row['Gruppo']).strip() if 'Gruppo' in row and not pd.isna(row['Gruppo']) else None
 
-                utility_dict = {
-                    'cabinet': cabinet,
-                    'node': node,
-                    'utility_name': utility_name,
-                    'gruppo': gruppo
-                }
+                    if not utility_name or utility_name == 'nan':
+                        print(f"WARNING: Empty utility name at row {idx}, skipping")
+                        continue
 
-                if cabinet == 0:
-                    # Dummy utility - will use virtual data
-                    utility_dict.update({
-                        'id': f"dummy_cabinet0_node{node}",
-                        'ip_address': '127.0.0.1',
-                        'port': 502
-                    })
-                    utilities.append(utility_dict)
+                    utility_dict = {
+                        'cabinet': cabinet,
+                        'node': node,
+                        'utility_name': utility_name,
+                        'gruppo': gruppo
+                    }
+
+                    if cabinet == 0:
+                        # Dummy utility - will use virtual data
+                        utility_dict.update({
+                            'id': f"dummy_cabinet0_node{node}",
+                            'ip_address': '127.0.0.1',
+                            'port': 502
+                        })
+                        utilities.append(utility_dict)
+                        continue
+
+                    ip_address = cabinet_ips.get(cabinet, None)
+
+                    if ip_address:
+                        utility_dict.update({
+                            'id': f"cabinet{cabinet}_node{node}",
+                            'ip_address': ip_address,
+                            'port': 502
+                        })
+                        utilities.append(utility_dict)
+                    else:
+                        print(f"WARNING: Unknown cabinet {cabinet} for utility {utility_name}")
+                        
+                except (ValueError, TypeError) as e:
+                    print(f"ERROR: Invalid data at row {idx}: {e}")
                     continue
-
-                ip_address = cabinet_ips.get(cabinet, None)
-
-                if ip_address:
-                    utility_dict.update({
-                        'id': f"cabinet{cabinet}_node{node}",
-                        'ip_address': ip_address,
-                        'port': 502
-                    })
-                    utilities.append(utility_dict)
-                else:
-                    print(f"WARNING: Unknown cabinet {cabinet} for utility {utility_name}")
 
             print(f"Loaded {len(utilities)} utilities from Utenze.xlsx")
             return utilities
             
         except FileNotFoundError:
             print("ERROR: Utenze.xlsx file not found!")
+            return []
+        except pd.errors.EmptyDataError:
+            print("ERROR: Utenze.xlsx is empty!")
             return []
         except Exception as e:
             print(f"ERROR loading utilities from Utenze.xlsx: {e}")
@@ -115,58 +139,89 @@ class ExcelBasedEnergyMeterReader:
     def load_registers_from_excel(self):
         """Load register configuration from registri.xlsx (only Report=Yes registers), and group by 'Type' column for badge grouping"""
         try:
+            if not os.path.exists('registri.xlsx'):
+                print("ERROR: registri.xlsx file not found!")
+                return {}
+                
             df_registri = pd.read_excel('registri.xlsx')
+            
+            # Validate required columns
+            required_columns = ['Registro', 'Lettura', 'Lenght']
+            missing_columns = [col for col in required_columns if col not in df_registri.columns]
+            if missing_columns:
+                print(f"ERROR: Missing required columns in registri.xlsx: {missing_columns}")
+                return {}
+            
             registers = {}
             print("Loading registers from registri.xlsx (Report=Yes only):")
-            for _, row in df_registri.iterrows():
-                # Check if this register should be reported
-                report_status = str(row['Report']).strip().lower() if 'Report' in row else 'yes'
-                if report_status not in ['yes', 'y', '1', 'true']:
-                    print(f"  Skipping register (Report={row['Report']}): {row['Lettura']}")
+            
+            for idx, row in df_registri.iterrows():
+                try:
+                    # Check if this register should be reported
+                    report_status = str(row.get('Report', 'yes')).strip().lower()
+                    if report_status not in ['yes', 'y', '1', 'true']:
+                        print(f"  Skipping register (Report={row.get('Report', 'N/A')}): {row['Lettura']}")
+                        continue
+                        
+                    end_address = int(row['Registro'])
+                    description = str(row['Lettura']).strip()
+                    data_type = str(row['Lenght']).strip()
+                    source_unit = str(row.get('Readings', '')).strip()
+                    target_unit = str(row.get('Convert to', source_unit)).strip()
+                    
+                    if not description or description == 'nan':
+                        print(f"WARNING: Empty description at row {idx}, skipping")
+                        continue
+                    
+                    # Use 'Type' column for grouping, fallback to Lettura if missing
+                    if 'Type' in df_registri.columns and pd.notna(row.get('Type')):
+                        category = str(row['Type']).strip().lower()
+                        category = category.replace(' ', '_').replace('/', '_')
+                        if category == 'currents':
+                            category = 'current'
+                        elif category == 'voltages':
+                            category = 'voltage'
+                        elif category == 'power_factors':
+                            category = 'power_factor'
+                    else:
+                        category = description.strip().replace(' ', '_').replace('/', '_').lower()
+                    
+                    # Calculate register count and start address based on data type
+                    if data_type.lower() == 'float':
+                        register_count = 2
+                        start_address = end_address - 1
+                    elif 'long long' in data_type.lower():
+                        register_count = 4
+                        start_address = end_address - 3
+                    else:
+                        register_count = 2
+                        start_address = end_address - 1
+                    
+                    # Store register info
+                    registers[start_address] = {
+                        'description': description,
+                        'data_type': data_type,
+                        'register_count': register_count,
+                        'start_address': start_address,
+                        'end_address': end_address,
+                        'source_unit': source_unit,
+                        'target_unit': target_unit,
+                        'category': category
+                    }
+                    print(f"  ✅ Register: {description} (Type: {category}) (Address: {start_address}-{end_address})")
+                    
+                except (ValueError, TypeError) as e:
+                    print(f"ERROR: Invalid register data at row {idx}: {e}")
                     continue
-                end_address = int(row['Registro'])
-                description = str(row['Lettura'])
-                data_type = str(row['Lenght'])
-                source_unit = str(row['Readings']) if 'Readings' in row else ''
-                target_unit = str(row['Convert to']) if 'Convert to' in row else source_unit
-                # Use 'Type' column for grouping, fallback to Lettura if missing
-                if 'Type' in df_registri.columns and pd.notna(row['Type']):
-                    category = str(row['Type']).strip().lower()
-                    category = category.replace(' ', '_').replace('/', '_')
-                    if category == 'currents':
-                        category = 'current'
-                    elif category == 'voltages':
-                        category = 'voltage'
-                    elif category == 'power_factors':
-                        category = 'power_factor'
-                else:
-                    category = description.strip().replace(' ', '_').replace('/', '_').lower()
-                # Calculate register count and start address based on data type
-                if data_type.lower() == 'float':
-                    register_count = 2
-                    start_address = end_address - 1
-                elif 'long long' in data_type.lower():
-                    register_count = 4
-                    start_address = end_address - 3
-                else:
-                    register_count = 2
-                    start_address = end_address - 1
-                # Store register info
-                registers[start_address] = {
-                    'description': description,
-                    'data_type': data_type,
-                    'register_count': register_count,
-                    'start_address': start_address,
-                    'end_address': end_address,
-                    'source_unit': source_unit,
-                    'target_unit': target_unit,
-                    'category': category
-                }
-                print(f"  ✅ Register: {description} (Type: {category}) (Address: {start_address}-{end_address})")
+                    
             print(f"Loaded {len(registers)} registers for reporting")
             return registers
+            
         except FileNotFoundError:
             print("ERROR: registri.xlsx file not found!")
+            return {}
+        except pd.errors.EmptyDataError:
+            print("ERROR: registri.xlsx is empty!")
             return {}
         except Exception as e:
             print(f"ERROR loading registers from registri.xlsx: {e}")
@@ -215,10 +270,19 @@ class ExcelBasedEnergyMeterReader:
         target_unit = register_info.get('target_unit', source_unit)
         
         try:
-            # Read the required number of registers
-            request = client.read_holding_registers(address=start_address, count=register_count, slave=node_id)
+            # Read the required number of registers with timeout
+            request = client.read_holding_registers(
+                address=start_address, 
+                count=register_count, 
+                slave=node_id
+            )
             
             if request.isError():
+                print(f"    Modbus error reading register {start_address}: {request}")
+                return None
+            
+            if not hasattr(request, 'registers') or not request.registers:
+                print(f"    No register data received for address {start_address}")
                 return None
             
             # Process based on data type to get raw value
@@ -227,35 +291,50 @@ class ExcelBasedEnergyMeterReader:
             if data_type.lower() == 'float':
                 # 32-bit float: 2 registers
                 if len(request.registers) < 2:
+                    print(f"    Insufficient registers for float at {start_address}: got {len(request.registers)}, need 2")
                     return None
                 high_word = request.registers[0]
                 low_word = request.registers[1]
                 
                 # Convert to 32-bit float: word order is little endian
-                packed_data = struct.pack('>HH', low_word, high_word)
-                raw_value = struct.unpack('>f', packed_data)[0]
+                try:
+                    packed_data = struct.pack('>HH', low_word, high_word)
+                    raw_value = struct.unpack('>f', packed_data)[0]
+                except struct.error as e:
+                    print(f"    Struct error unpacking float at {start_address}: {e}")
+                    return None
                 
             elif 'long long' in data_type.lower():
                 # 64-bit signed long long: 4 registers
                 if len(request.registers) < 4:
+                    print(f"    Insufficient registers for long long at {start_address}: got {len(request.registers)}, need 4")
                     return None
                 
-                word1 = request.registers[0]
-                word2 = request.registers[1] 
-                word3 = request.registers[2]
-                word4 = request.registers[3]
-                
-                packed_data = struct.pack('>HHHH', word4, word3, word2, word1)
-                raw_value = struct.unpack('>q', packed_data)[0]
+                try:
+                    word1 = request.registers[0]
+                    word2 = request.registers[1] 
+                    word3 = request.registers[2]
+                    word4 = request.registers[3]
+                    
+                    packed_data = struct.pack('>HHHH', word4, word3, word2, word1)
+                    raw_value = struct.unpack('>q', packed_data)[0]
+                except struct.error as e:
+                    print(f"    Struct error unpacking long long at {start_address}: {e}")
+                    return None
                 
             else:
                 # Unknown type, try as float
                 if len(request.registers) >= 2:
-                    high_word = request.registers[0]
-                    low_word = request.registers[1]
-                    packed_data = struct.pack('>HH', low_word, high_word)
-                    raw_value = struct.unpack('>f', packed_data)[0]
+                    try:
+                        high_word = request.registers[0]
+                        low_word = request.registers[1]
+                        packed_data = struct.pack('>HH', low_word, high_word)
+                        raw_value = struct.unpack('>f', packed_data)[0]
+                    except struct.error as e:
+                        print(f"    Struct error unpacking unknown type as float at {start_address}: {e}")
+                        return None
                 else:
+                    print(f"    Insufficient registers for unknown type at {start_address}: got {len(request.registers)}")
                     return None
             
             # Apply unit conversion
@@ -265,8 +344,11 @@ class ExcelBasedEnergyMeterReader:
             else:
                 return None
                     
+        except ConnectionException as e:
+            print(f"    Connection error reading register {start_address}: {e}")
+            return None
         except Exception as e:
-            print(f"    ERROR reading register {start_address}: {e}")
+            print(f"    Unexpected error reading register {start_address}: {e}")
             return None
 
     def read_single_utility(self, utility):
@@ -281,7 +363,6 @@ class ExcelBasedEnergyMeterReader:
 
         # In dummy mode generate simulated data without connecting
         if MODE == 'DUMMY' or 'dummy' in utility_id.lower():
-            import random
             v1 = round(random.uniform(398, 403), 1)
             v2 = round(random.uniform(398, 403), 1)
             v3 = round(random.uniform(398, 403), 1)
@@ -315,8 +396,8 @@ class ExcelBasedEnergyMeterReader:
                 }
             }
 
-        # Create Modbus TCP client
-        client = ModbusTcpClient(ip_address, port=port, timeout=3)
+        # Create Modbus TCP client with timeout
+        client = ModbusTcpClient(ip_address, port=port, timeout=5)
         
         utility_data = {
             'id': utility_id,
@@ -330,13 +411,19 @@ class ExcelBasedEnergyMeterReader:
         }
         
         try:
-            # Connect to the device
+            # Connect to the device with timeout
             connection_result = client.connect()
             if not connection_result:
                 utility_data['status'] = 'CONNECTION_FAILED'
+                print(f"    Failed to connect to {ip_address}:{port}")
                 return utility_data
             
+            print(f"    ✅ Connected to {ip_address}:{port}")
+            
             # Read all registers
+            successful_reads = 0
+            total_registers = len(registers_config)
+            
             for start_address, register_info in registers_config.items():
                 try:
                     value = self.read_register_value(client, register_info, node_id)
@@ -350,6 +437,7 @@ class ExcelBasedEnergyMeterReader:
                             'status': 'OK',
                             'category': register_info.get('category', 'other')
                         }
+                        successful_reads += 1
                     else:
                         utility_data['registers'][register_key] = {
                             'description': register_info['description'],
@@ -358,7 +446,6 @@ class ExcelBasedEnergyMeterReader:
                             'status': 'ERROR',
                             'category': register_info.get('category', 'other')
                         }
-                        utility_data['status'] = 'PARTIAL'
 
                 except Exception as e:
                     register_key = f"reg_{start_address}"
@@ -366,10 +453,18 @@ class ExcelBasedEnergyMeterReader:
                         'description': register_info['description'],
                         'value': 'ERROR',
                         'unit': register_info.get('target_unit', ''),
-                        'status': 'ERROR'
+                        'status': 'ERROR',
+                        'category': register_info.get('category', 'other')
                     }
-                    utility_data['status'] = 'PARTIAL'
                     print(f"    Exception reading register {start_address}: {e}")
+
+            # Update status based on success rate
+            if successful_reads == 0:
+                utility_data['status'] = 'ALL_REGISTERS_FAILED'
+            elif successful_reads < total_registers:
+                utility_data['status'] = 'PARTIAL'
+                
+            print(f"    📊 Read {successful_reads}/{total_registers} registers successfully")
 
             # After reading all registers, calculate total power if possible
             try:
@@ -397,16 +492,21 @@ class ExcelBasedEnergyMeterReader:
                         'status': 'OK',
                         'category': 'power'
                     }
+                    print(f"    ⚡ Calculated total power: {round(p_tot, 2)} kW")
             except Exception as calc_err:
-                print(f"    Error calculating power: {calc_err}")
+                print(f"    ⚠️  Error calculating power: {calc_err}")
 
+        except ConnectionException as e:
+            utility_data['status'] = f'CONNECTION_ERROR: {str(e)[:30]}'
+            print(f"    Connection error: {e}")
         except Exception as e:
             utility_data['status'] = f'EXCEPTION: {str(e)[:50]}'
-            print(f"Exception reading utility {utility_name}: {e}")
+            print(f"    Unexpected error: {e}")
             
         finally:
             try:
                 client.close()
+                print(f"    🔌 Disconnected from {ip_address}:{port}")
             except:
                 pass
         
@@ -417,7 +517,6 @@ class ExcelBasedEnergyMeterReader:
         global latest_readings, last_update_time, connection_status, utilities_config, MODE
 
         if MODE == 'DUMMY':
-            import random
             print("DUMMY MODE: Only simulated data will be used.")
             dummy_id = 'dummy_cabinet1_node1'
             # Generate random but realistic values for each refresh
@@ -684,41 +783,32 @@ def get_readings():
         'registers_count': len(registers_config)
     })
 
-@app.route('/api/refresh_all')
-def refresh_all():
-    """API endpoint to refresh all utilities and reload configuration"""
-    global utilities_config, registers_config
+@app.route('/api/refresh_machines')
+def refresh_machines():
+    """API endpoint to refresh machine list by reloading Utenze.xlsx"""
+    global utilities_config
     
-    print("Manual refresh of all utilities requested - reloading configuration files")
+    print("Manual refresh of machine list requested - reloading Utenze.xlsx")
     
     try:
-        # Reload configuration from Excel files
-        print("Reloading configuration from Excel files...")
-        energy_reader.load_configuration()
-        
-        # Update global variables with new configuration
+        # Reload only utilities configuration from Excel file
+        print("Reloading utilities from Utenze.xlsx...")
         utilities_config = energy_reader.load_utilities_from_excel()
-        registers_config = energy_reader.load_registers_from_excel()
         
-        print(f"Configuration reloaded: {len(utilities_config)} utilities, {len(registers_config)} registers")
-        
-        # Read all utilities with new configuration
-        readings = energy_reader.read_all_utilities()
+        print(f"Machines reloaded: {len(utilities_config)} utilities")
         
         return jsonify({
             'success': True,
-            'readings': readings,
             'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'message': f'Configuration reloaded: {len(utilities_config)} utilities, {len(registers_config)} registers',
-            'utilities_count': len(utilities_config),
-            'registers_count': len(registers_config)
+            'message': f'Machines reloaded: {len(utilities_config)} utilities',
+            'utilities_count': len(utilities_config)
         })
         
     except Exception as e:
-        print(f"Error reloading configuration: {e}")
+        print(f"Error reloading machines: {e}")
         return jsonify({
             'success': False,
-            'error': f'Failed to reload configuration: {str(e)}',
+            'error': f'Failed to reload machines: {str(e)}',
             'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         }), 500
 
@@ -771,19 +861,34 @@ def get_configuration():
 
 def background_reading_thread():
     """Background thread to perform initial reading only at startup"""
-    global energy_reader
+    global energy_reader, latest_readings, last_update_time, connection_status
     
-    print("Starting initial background reading...")
+    print("🔄 Starting initial background reading...")
     
     try:
-        print("Background reading cycle starting...")
-        energy_reader.read_all_utilities()
-        print("Background reading cycle completed")
-        print("Initial reading finished. Further readings will be user-controlled only.")
+        print("📊 Background reading cycle starting...")
+        all_readings = energy_reader.read_all_utilities()
+        
+        # Update global state
+        latest_readings = all_readings
+        last_update_time = datetime.now()
+        
+        successful_count = sum(1 for reading in all_readings.values() 
+                             if reading.get('status') in ['OK', 'PARTIAL'])
+        
+        if successful_count > 0:
+            connection_status = f"Connected ({successful_count}/{len(utilities_config)} utilities)"
+            print(f"✅ Background reading completed: {successful_count}/{len(utilities_config)} utilities successful")
+        else:
+            connection_status = "All connections failed"
+            print("❌ Background reading failed: No utilities responded")
+            
+        print("📋 Initial reading finished. Further readings will be user-controlled only.")
         
     except Exception as e:
-        print(f"Error in initial background reading: {e}")
-        print("Initial reading failed, but server will continue. Use manual refresh buttons.")
+        print(f"❌ Error in initial background reading: {e}")
+        connection_status = f"Initial reading failed: {str(e)[:50]}"
+        print("⚠️  Initial reading failed, but server will continue. Use manual refresh buttons.")
 
 # Create the HTML template directory and file
 def create_html_template():
@@ -799,7 +904,7 @@ def create_html_template():
         print("HTML template exists, skipping creation")
         return
 
-    html_content = '''<!DOCTYPE html>
+    html_content = r'''<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -2217,16 +2322,38 @@ if __name__ == '__main__':
     print("=" * 60)
     print()
     
+    # Check if required files exist
+    required_files = ['Utenze.xlsx', 'registri.xlsx']
+    missing_files = [f for f in required_files if not os.path.exists(f)]
+    
+    if missing_files:
+        print(f"❌ ERROR: Missing required files: {', '.join(missing_files)}")
+        print("Please ensure these Excel files are in the same directory as this script.")
+        exit(1)
+    
     # Create HTML template
     create_html_template()
     
-    print(f"\nStarting web server on http://localhost:5000")
-    print(f"Configuration: {len(utilities_config)} utilities, {len(registers_config)} registers")
+    # Validate configuration
+    if not utilities_config:
+        print("⚠️  WARNING: No utilities loaded from Utenze.xlsx")
+    if not registers_config:
+        print("⚠️  WARNING: No registers loaded from registri.xlsx")
+    
+    print(f"\n✅ Configuration loaded:")
+    print(f"   📊 {len(utilities_config)} utilities")
+    print(f"   📋 {len(registers_config)} registers")
+    print(f"   🔧 Mode: {MODE}")
+    
+    print(f"\n🌐 Starting web server on http://localhost:5050")
     print("📋 Use 'Refresh All' or individual 'Refresh' buttons to update readings")
-    print("Press Ctrl+C to stop the server")
+    print("⏹️  Press Ctrl+C to stop the server")
     print()
     
     try:
         app.run(host='0.0.0.0', port=5050, debug=False, threaded=True)
     except KeyboardInterrupt:
-        print("\nServer stopped by user")
+        print("\n⏹️  Server stopped by user")
+    except Exception as e:
+        print(f"\n❌ Server error: {e}")
+        exit(1)

@@ -587,6 +587,9 @@
             <div class="machine-select">
                 <label for="machineSelect">Machine:</label>
                 <select id="machineSelect"></select>
+                <button class="refresh-machines-btn" id="refreshMachinesBtn" onclick="refreshMachines()">
+                    🔄 Refresh Machines
+                </button>
             </div>
         </div>
 
@@ -604,9 +607,6 @@
             <div class="status-item">
                 <span id="monitoringCount">Live Monitoring: 0</span>
             </div>
-            <button class="refresh-all-btn" id="refreshAllBtn" onclick="refreshAll()">
-                🔄 Refresh All
-            </button>
         </div>
 
         <div class="utilities-grid" id="utilitiesGrid">
@@ -1376,44 +1376,47 @@
             return 'status-error';
         }
 
-        async function refreshAll() {
+        async function refreshMachines() {
             if (isRefreshing) return;
             
             isRefreshing = true;
-            const btn = document.getElementById('refreshAllBtn');
-            btn.disabled = true;
-            btn.textContent = '🔄 Reloading Config & Refreshing...';
+            const btn = document.getElementById('refreshMachinesBtn');
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = '🔄 Reloading...';
+            }
             
             try {
-                const response = await fetch('/api/refresh_all');
+                const response = await fetch('/api/refresh_machines');
                 const data = await response.json();
                 
                 if (data.success) {
                     // Update utilities count if configuration changed
-                    if (data.utilities_count !== undefined && data.registers_count !== undefined) {
+                    if (data.utilities_count !== undefined) {
                         document.getElementById('utilitiesCount').textContent = 
-                            `Utilities: ${data.utilities_count} | Registers: ${data.registers_count}`;
+                            `Utilities: ${data.utilities_count}`;
                     }
                     
                     // Show configuration reload message if provided
                     if (data.message) {
-                        console.log('Configuration reloaded:', data.message);
+                        console.log('Machine list reloaded:', data.message);
                         showSuccess(data.message);
                     }
                     
                     await loadMachineList();
-                    loadReadings();
                 } else {
-                    showError(`Failed to refresh: ${data.error || 'Unknown error'}`);
+                    showError(`Failed to refresh machines: ${data.error || 'Unknown error'}`);
                 }
                 
             } catch (error) {
-                console.error('Error refreshing all:', error);
-                showError('Error occurred while refreshing all utilities');
+                console.error('Error refreshing machines:', error);
+                showError('Error occurred while refreshing machine list');
             } finally {
                 isRefreshing = false;
-                btn.disabled = false;
-                btn.textContent = '🔄 Refresh All';
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = '🔄 Refresh';
+                }
             }
         }
 

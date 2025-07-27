@@ -1,2 +1,4 @@
 pymodbus>=3.0.0
 flask>=2.0.0
+pandas>=1.0.0
+openpyxl>=3.0.0
