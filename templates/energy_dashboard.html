@@ -1113,18 +1113,39 @@
                 placeholder.disabled = true;
                 select.appendChild(placeholder);
 
+                // Group by gruppo
+                const groups = {};
                 machines.forEach(m => {
-                    const opt = document.createElement('option');
-                    opt.value = m.id;
-                    opt.textContent = `Cabinet ${m.cabinet} Node ${m.node} - ${m.name}`;
-                    select.appendChild(opt);
+                    const gruppo = m.gruppo || 'Other';
+                    if (!groups[gruppo]) groups[gruppo] = [];
+                    groups[gruppo].push(m);
                 });
 
-                const dummy = machines.find(m => m.id.toLowerCase().includes('dummy'));
+                Object.keys(groups).forEach(gruppo => {
+                    const optgroup = document.createElement('optgroup');
+                    optgroup.label = gruppo;
+                    groups[gruppo].forEach(m => {
+                        const opt = document.createElement('option');
+                        opt.value = m.id;
+                        opt.textContent = `${m.name} (Cabinet ${m.cabinet}, Node ${m.node})`;
+                        optgroup.appendChild(opt);
+                    });
+                    select.appendChild(optgroup);
+                });
+
+                // Auto-select dummy if present, else first
+                let dummy = null;
+                Object.values(groups).forEach(arr => {
+                    arr.forEach(m => {
+                        if (m.id && m.id.toLowerCase().includes('dummy')) dummy = m;
+                    });
+                });
                 if (dummy) {
                     select.value = dummy.id;
-                } else if (machines.length > 0) {
-                    select.value = machines[0].id;
+                } else {
+                    // Select first real machine if available
+                    const firstGroup = Object.values(groups)[0];
+                    if (firstGroup && firstGroup.length > 0) select.value = firstGroup[0].id;
                 }
             } catch (error) {
                 console.error('Error loading machines:', error);

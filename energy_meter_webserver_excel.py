@@ -71,30 +71,34 @@ class ExcelBasedEnergyMeterReader:
                 cabinet = int(row['Cabinet'])
                 node = int(row['Nodo'])
                 utility_name = str(row['Utenza'])
+                gruppo = str(row['Gruppo']) if 'Gruppo' in row and not pd.isna(row['Gruppo']) else None
+
+                utility_dict = {
+                    'cabinet': cabinet,
+                    'node': node,
+                    'utility_name': utility_name,
+                    'gruppo': gruppo
+                }
 
                 if cabinet == 0:
                     # Dummy utility - will use virtual data
-                    utilities.append({
+                    utility_dict.update({
                         'id': f"dummy_cabinet0_node{node}",
-                        'cabinet': cabinet,
-                        'node': node,
-                        'utility_name': utility_name,
                         'ip_address': '127.0.0.1',
                         'port': 502
                     })
+                    utilities.append(utility_dict)
                     continue
 
                 ip_address = cabinet_ips.get(cabinet, None)
 
                 if ip_address:
-                    utilities.append({
+                    utility_dict.update({
                         'id': f"cabinet{cabinet}_node{node}",
-                        'cabinet': cabinet,
-                        'node': node,
-                        'utility_name': utility_name,
                         'ip_address': ip_address,
                         'port': 502
                     })
+                    utilities.append(utility_dict)
                 else:
                     print(f"WARNING: Unknown cabinet {cabinet} for utility {utility_name}")
 
@@ -660,7 +664,8 @@ def utilities_list():
             'id': u['id'],
             'name': u['utility_name'],
             'cabinet': u['cabinet'],
-            'node': u['node']
+            'node': u['node'],
+            'gruppo': u.get('gruppo', None)
         }
         for u in utilities_config
     ]
