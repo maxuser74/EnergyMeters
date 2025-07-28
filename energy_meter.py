@@ -17,7 +17,7 @@ import pandas as pd
 from datetime import datetime
 from flask import Flask, render_template, jsonify, request
 from pymodbus.constants import Endian
-from pymodbus.client import ModbusTcpClient
+from pymodbus.client.sync import ModbusTcpClient
 from pymodbus.exceptions import ConnectionException
 
 app = Flask(__name__)
@@ -82,9 +82,9 @@ class ExcelBasedEnergyMeterReader:
                 elif category == 'power':
                     dummy_value = round(random.uniform(150, 250), 2) if use_random else 200.0
                 elif category == 'setup':
-                    # For setup registers like Transducer ratio, use reasonable values
+                    # For setup registers like Transducer ratio, use fixed value
                     if 'transducer' in description.lower():
-                        dummy_value = round(random.uniform(1.0, 5.0), 1) if use_random else 2.5
+                        dummy_value = 1000
                     else:
                         dummy_value = round(random.uniform(1, 100), 0) if use_random else 50
                 else:

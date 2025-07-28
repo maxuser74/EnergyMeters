@@ -276,6 +276,11 @@
             color: white;
         }
 
+        .setup-section .section-title {
+            background: linear-gradient(135deg, #34495e, #2c3e50);
+            color: white;
+        }
+
         .other-section .section-title {
             background: linear-gradient(135deg, #9b59b6, #8e44ad);
             color: white;
@@ -354,6 +359,11 @@
         .register-badge.power_factor {
             border-color: #8e44ad;
             background: linear-gradient(135deg, #f5e6ff, #f3e8ff);
+        }
+
+        .register-badge.setup {
+            border-color: #34495e;
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
         }
 
         .register-badge.other {
@@ -565,6 +575,7 @@
         body.dark-mode .register-badge.current { background: #21374d; }
         body.dark-mode .register-badge.power { background: #1c3b25; }
         body.dark-mode .register-badge.power_factor { background: #35294d; }
+        body.dark-mode .register-badge.setup { background: #2c3e50; }
         body.dark-mode .register-badge.other { background: #3a2e4d; }
 
         /* Ensure good contrast for text in dark mode */
@@ -1232,7 +1243,7 @@
                     categories[cat].push({key: regKey, data: regData});
                 }
                 // Arrange categories in a fixed 2x2 grid
-                const mainOrder = ['voltage', 'current', 'power_factor', 'power'];
+                const mainOrder = ['voltage', 'current', 'power_factor', 'power', 'setup'];
                 registersHtml = '<div class="registers-container">';
                 registersHtml += '<div class="category-grid">';
 
@@ -1244,6 +1255,7 @@
                     else if (cat === 'current') icon = '🔌';
                     else if (cat === 'power') icon = '🔋';
                     else if (cat === 'power_factor') icon = '📐';
+                    else if (cat === 'setup') icon = '🔧';
                     else icon = '📊';
 
                     let sectionClass = `${cat}-section`;
@@ -1333,7 +1345,7 @@
             const valueClass = regData.status === 'OK' ? '' : 'error';
             // Add data-category for dynamic coloring
             let dataAttr = '';
-            if (regData.status === 'OK' && !['voltage','current','power','power_factor','other'].includes(category)) {
+            if (regData.status === 'OK' && !['voltage','current','power','power_factor','setup','other'].includes(category)) {
                 dataAttr = `data-category="${category}"`;
             }
             // Show the type/category in the badge for clarity
