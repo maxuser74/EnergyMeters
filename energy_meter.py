@@ -62,8 +62,20 @@ class ExcelBasedEnergyMeterReader:
             c1, c2, c3 = 200.5, 198.7, 201.2
             pf1, pf2, pf3 = 0.91, 0.89, 0.92
         
-        # Calculate total power
-        p_tot_kw = round((v1 * c1 * pf1 + v2 * c2 * pf2 + v3 * c3 * pf3) / 1000, 2)
+        # Calculate active power using both methods
+        import math
+        
+        # Method 1: Sum of individual phase powers
+        p_sum = (v1 * c1 * pf1 + v2 * c2 * pf2 + v3 * c3 * pf3) / 1000
+        
+        # Method 2: Three-phase power formula P = √3 * V_line * I_avg * cosφ_avg
+        v_line = max(v1, v2, v3)  # Use highest voltage as line voltage
+        i_avg = (c1 + c2 + c3) / 3
+        cosph_avg = (pf1 + pf2 + pf3) / 3
+        p_three_phase = (math.sqrt(3) * v_line * i_avg * cosph_avg) / 1000
+        
+        # Use the sum of phase powers for dummy data (more realistic)
+        p_tot_kw = round(p_sum, 2)
         
         return {
             'id': utility_id,
@@ -83,7 +95,7 @@ class ExcelBasedEnergyMeterReader:
                 'power_factor_L1': {'description': 'Power Factor L1', 'value': pf1, 'unit': '', 'category': 'power_factor', 'status': 'OK'},
                 'power_factor_L2': {'description': 'Power Factor L2', 'value': pf2, 'unit': '', 'category': 'power_factor', 'status': 'OK'},
                 'power_factor_L3': {'description': 'Power Factor L3', 'value': pf3, 'unit': '', 'category': 'power_factor', 'status': 'OK'},
-                'active_power': {'description': 'Active Power', 'value': p_tot_kw, 'unit': 'kW', 'category': 'power', 'status': 'OK'}
+                'calculated_active_power': {'description': 'Calculated Active Power', 'value': p_tot_kw, 'unit': 'kW', 'category': 'power', 'status': 'OK'}
             }
         }
         
@@ -228,6 +240,8 @@ class ExcelBasedEnergyMeterReader:
                             category = 'voltage'
                         elif category == 'power_factors':
                             category = 'power_factor'
+                        elif category == 'power':
+                            category = 'power'
                     else:
                         category = description.strip().replace(' ', '_').replace('/', '_').lower()
                     
@@ -500,8 +514,10 @@ class ExcelBasedEnergyMeterReader:
                 
             print(f"    📊 Read {successful_reads}/{total_registers} registers successfully")
 
-            # After reading all registers, calculate total power if possible
+            # After reading all registers, calculate active power using both methods
             try:
+                import math
+                
                 volts = []
                 amps = []
                 pfs = []
@@ -517,18 +533,63 @@ class ExcelBasedEnergyMeterReader:
                     elif cat == 'power_factor':
                         pfs.append(val)
 
-                if len(volts) >= 3 and len(amps) >= 3 and len(pfs) >= 3:
-                    p_tot = (volts[0]*amps[0]*pfs[0] + volts[1]*amps[1]*pfs[1] + volts[2]*amps[2]*pfs[2]) / 1000
-                    utility_data['registers']['calculated_power'] = {
-                        'description': 'Calculated Power',
-                        'value': round(p_tot, 2),
+                if len(volts) >= 2 and len(amps) >= 3 and len(pfs) >= 3:
+                    # Method 1: Sum of individual phase powers (P = V * I * cosφ for each phase)
+                    if len(volts) >= 3:
+                        # Use individual phase voltages
+                        p_per_phase = (volts[0]*amps[0]*pfs[0] + volts[1]*amps[1]*pfs[1] + volts[2]*amps[2]*pfs[2]) / 1000
+                        method_used = "Sum of phase powers"
+                    else:
+                        # Use average voltage for all phases
+                        v_avg = sum(volts) / len(volts)
+                        p_per_phase = (v_avg*amps[0]*pfs[0] + v_avg*amps[1]*pfs[1] + v_avg*amps[2]*pfs[2]) / 1000
+                        method_used = f"Average voltage ({round(v_avg, 1)}V) × phase currents"
+                    
+                    # Method 2: Three-phase power formula P = √3 * V_line * I_avg * cosφ_avg
+                    # Assuming we have line-to-neutral voltages, convert to line-to-line
+                    v_line = max(volts) if volts else 400  # Use highest voltage or default 400V
+                    i_avg = sum(amps) / len(amps)
+                    cosph_avg = sum(pfs) / len(pfs)
+                    p_three_phase = (math.sqrt(3) * v_line * i_avg * cosph_avg) / 1000
+                    
+                    # Use the more conservative (typically lower) value
+                    p_final = min(p_per_phase, p_three_phase)
+                    
+                    utility_data['registers']['calculated_active_power'] = {
+                        'description': 'Calculated Active Power',
+                        'value': round(p_final, 2),
                         'unit': 'kW',
                         'status': 'OK',
                         'category': 'power'
                     }
-                    print(f"    ⚡ Calculated total power: {round(p_tot, 2)} kW")
+                    
+                    print(f"    ⚡ Active Power Calculation:")
+                    print(f"       Method 1 ({method_used}): {round(p_per_phase, 2)} kW")
+                    print(f"       Method 2 (√3×V×I×cosφ): {round(p_three_phase, 2)} kW")
+                    print(f"       Final calculated power: {round(p_final, 2)} kW")
+                    
+                elif len(volts) >= 1 and len(amps) >= 1 and len(pfs) >= 1:
+                    # Fallback calculation with available data
+                    v_use = volts[0] if volts else 400
+                    i_use = sum(amps) / len(amps)
+                    pf_use = sum(pfs) / len(pfs)
+                    
+                    # Simple three-phase approximation
+                    p_approx = (math.sqrt(3) * v_use * i_use * pf_use) / 1000
+                    
+                    utility_data['registers']['calculated_active_power'] = {
+                        'description': 'Calculated Active Power (Approx)',
+                        'value': round(p_approx, 2),
+                        'unit': 'kW',
+                        'status': 'OK',
+                        'category': 'power'
+                    }
+                    print(f"    ⚡ Approximate active power: {round(p_approx, 2)} kW (V={v_use}V, I_avg={round(i_use,1)}A, cosφ_avg={round(pf_use,2)})")
+                else:
+                    print(f"    ⚠️  Insufficient data for power calculation (V:{len(volts)}, I:{len(amps)}, PF:{len(pfs)})")
+                    
             except Exception as calc_err:
-                print(f"    ⚠️  Error calculating power: {calc_err}")
+                print(f"    ⚠️  Error calculating active power: {calc_err}")
 
         except ConnectionException as e:
             utility_data['status'] = f'CONNECTION_ERROR: {str(e)[:30]}'
