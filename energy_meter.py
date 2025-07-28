@@ -44,40 +44,12 @@ class ExcelBasedEnergyMeterReader:
         
     def generate_dummy_data(self, utility_id='dummy_cabinet1_node1', utility_name='DEMO DUMMY MACHINE', 
                            cabinet=1, node=1, ip_address='127.0.0.1', use_random=True):
-        """Generate dummy utility data for testing/demo purposes"""
-        if use_random:
-            # Generate random but realistic values
-            v1 = round(random.uniform(398, 403), 1)
-            v2 = round(random.uniform(398, 403), 1)
-            v3 = round(random.uniform(398, 403), 1)
-            c1 = round(random.uniform(195, 205), 1)
-            c2 = round(random.uniform(195, 205), 1)
-            c3 = round(random.uniform(195, 205), 1)
-            pf1 = round(random.uniform(0.88, 0.93), 2)
-            pf2 = round(random.uniform(0.88, 0.93), 2)
-            pf3 = round(random.uniform(0.88, 0.93), 2)
-        else:
-            # Use fixed values for consistency
-            v1, v2, v3 = 400.2, 399.8, 401.1
-            c1, c2, c3 = 200.5, 198.7, 201.2
-            pf1, pf2, pf3 = 0.91, 0.89, 0.92
-        
-        # Calculate active power using both methods
+        """Generate dummy utility data for testing/demo purposes using actual Excel register configuration"""
+        import random
         import math
         
-        # Method 1: Sum of individual phase powers
-        p_sum = (v1 * c1 * pf1 + v2 * c2 * pf2 + v3 * c3 * pf3) / 1000
-        
-        # Method 2: Three-phase power formula P = √3 * V_line * I_avg * cosφ_avg
-        v_line = max(v1, v2, v3)  # Use highest voltage as line voltage
-        i_avg = (c1 + c2 + c3) / 3
-        cosph_avg = (pf1 + pf2 + pf3) / 3
-        p_three_phase = (math.sqrt(3) * v_line * i_avg * cosph_avg) / 1000
-        
-        # Use the sum of phase powers for dummy data (more realistic)
-        p_tot_kw = round(p_sum, 2)
-        
-        return {
+        # Start with basic utility info
+        utility_data = {
             'id': utility_id,
             'name': utility_name,
             'cabinet': cabinet,
@@ -85,7 +57,84 @@ class ExcelBasedEnergyMeterReader:
             'ip_address': ip_address,
             'status': 'OK',
             'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'registers': {
+            'registers': {}
+        }
+        
+        # Generate dummy values for all Excel-configured registers
+        global registers_config
+        
+        if registers_config:
+            print(f"    🧪 Generating dummy data for {len(registers_config)} Excel registers")
+            
+            for start_address, register_info in registers_config.items():
+                register_key = f"reg_{start_address}"
+                description = register_info['description']
+                category = register_info.get('category', 'other')
+                target_unit = register_info.get('target_unit', '')
+                
+                # Generate realistic dummy values based on register type/category
+                if category == 'voltage':
+                    dummy_value = round(random.uniform(398, 403), 1) if use_random else 400.2
+                elif category == 'current':
+                    dummy_value = round(random.uniform(195, 205), 1) if use_random else 200.0
+                elif category == 'power_factor':
+                    dummy_value = round(random.uniform(0.88, 0.93), 2) if use_random else 0.90
+                elif category == 'power':
+                    dummy_value = round(random.uniform(150, 250), 2) if use_random else 200.0
+                elif category == 'setup':
+                    # For setup registers like Transducer ratio, use reasonable values
+                    if 'transducer' in description.lower():
+                        dummy_value = round(random.uniform(1.0, 5.0), 1) if use_random else 2.5
+                    else:
+                        dummy_value = round(random.uniform(1, 100), 0) if use_random else 50
+                else:
+                    # Default dummy value for other categories
+                    dummy_value = round(random.uniform(10, 100), 1) if use_random else 50.0
+                
+                # Add the register to dummy data
+                utility_data['registers'][register_key] = {
+                    'description': description,
+                    'value': dummy_value,
+                    'unit': target_unit,
+                    'status': 'OK',
+                    'category': category
+                }
+        
+        else:
+            # Fallback to hardcoded dummy data if no Excel config is available
+            print(f"    ⚠️  No Excel register config available, using hardcoded dummy data")
+            
+            if use_random:
+                # Generate random but realistic values
+                v1 = round(random.uniform(398, 403), 1)
+                v2 = round(random.uniform(398, 403), 1)
+                v3 = round(random.uniform(398, 403), 1)
+                c1 = round(random.uniform(195, 205), 1)
+                c2 = round(random.uniform(195, 205), 1)
+                c3 = round(random.uniform(195, 205), 1)
+                pf1 = round(random.uniform(0.88, 0.93), 2)
+                pf2 = round(random.uniform(0.88, 0.93), 2)
+                pf3 = round(random.uniform(0.88, 0.93), 2)
+            else:
+                # Use fixed values for consistency
+                v1, v2, v3 = 400.2, 399.8, 401.1
+                c1, c2, c3 = 200.5, 198.7, 201.2
+                pf1, pf2, pf3 = 0.91, 0.89, 0.92
+            
+            # Calculate active power using both methods
+            # Method 1: Sum of individual phase powers
+            p_sum = (v1 * c1 * pf1 + v2 * c2 * pf2 + v3 * c3 * pf3) / 1000
+            
+            # Method 2: Three-phase power formula P = √3 * V_line * I_avg * cosφ_avg
+            v_line = max(v1, v2, v3)  # Use highest voltage as line voltage
+            i_avg = (c1 + c2 + c3) / 3
+            cosph_avg = (pf1 + pf2 + pf3) / 3
+            p_three_phase = (math.sqrt(3) * v_line * i_avg * cosph_avg) / 1000
+            
+            # Use the sum of phase powers for dummy data (more realistic)
+            p_tot_kw = round(p_sum, 2)
+            
+            utility_data['registers'] = {
                 'voltage_L1': {'description': 'Voltage L1', 'value': v1, 'unit': 'V', 'category': 'voltage', 'status': 'OK'},
                 'voltage_L2': {'description': 'Voltage L2', 'value': v2, 'unit': 'V', 'category': 'voltage', 'status': 'OK'},
                 'voltage_L3': {'description': 'Voltage L3', 'value': v3, 'unit': 'V', 'category': 'voltage', 'status': 'OK'},
@@ -97,7 +146,8 @@ class ExcelBasedEnergyMeterReader:
                 'power_factor_L3': {'description': 'Power Factor L3', 'value': pf3, 'unit': '', 'category': 'power_factor', 'status': 'OK'},
                 'calculated_active_power': {'description': 'Calculated Active Power', 'value': p_tot_kw, 'unit': 'kW', 'category': 'power', 'status': 'OK'}
             }
-        }
+        
+        return utility_data
         
     def load_configuration(self):
         """Load configuration from Excel files"""
@@ -226,6 +276,15 @@ class ExcelBasedEnergyMeterReader:
                     source_unit = str(row.get('Readings', '')).strip()
                     target_unit = str(row.get('Convert to', source_unit)).strip()
                     
+                    # Get the Factor column for unit conversion
+                    factor = None
+                    if 'Factor' in df_registri.columns and pd.notna(row.get('Factor')):
+                        try:
+                            factor = float(row['Factor'])
+                        except (ValueError, TypeError):
+                            print(f"  WARNING: Invalid Factor value '{row.get('Factor')}' for register {end_address}, ignoring")
+                            factor = None
+                    
                     if not description or description == 'nan':
                         print(f"WARNING: Empty description at row {idx}, skipping")
                         continue
@@ -242,6 +301,8 @@ class ExcelBasedEnergyMeterReader:
                             category = 'power_factor'
                         elif category == 'power':
                             category = 'power'
+                        elif category == 'setup':
+                            category = 'setup'
                     else:
                         category = description.strip().replace(' ', '_').replace('/', '_').lower()
                     
@@ -265,9 +326,11 @@ class ExcelBasedEnergyMeterReader:
                         'end_address': end_address,
                         'source_unit': source_unit,
                         'target_unit': target_unit,
+                        'factor': factor,
                         'category': category
                     }
-                    print(f"  ✅ Register: {description} (Type: {category}) (Address: {start_address}-{end_address})")
+                    factor_info = f" (Factor: {factor})" if factor is not None else ""
+                    print(f"  ✅ Register: {description} (Type: {category}) (Address: {start_address}-{end_address}){factor_info}")
                     
                 except (ValueError, TypeError) as e:
                     print(f"ERROR: Invalid register data at row {idx}: {e}")
@@ -286,11 +349,17 @@ class ExcelBasedEnergyMeterReader:
             print(f"ERROR loading registers from registri.xlsx: {e}")
             return {}
 
-    def convert_units(self, value, source_unit, target_unit):
-        """Convert value from source unit to target unit"""
+    def convert_units(self, value, source_unit, target_unit, factor=None):
+        """Convert value from source unit to target unit using Factor column if available"""
         if value is None:
             return None
         
+        # If Factor is provided, apply it for direct conversion
+        if factor is not None and factor != 0:
+            converted_value = value * factor
+            return round(converted_value, 3)
+        
+        # Fallback to manual conversion rules if no factor is provided
         # Normalize unit names
         source = source_unit.lower().replace(' ', '').replace('_', '')
         target = target_unit.lower().replace(' ', '').replace('_', '')
@@ -396,9 +465,10 @@ class ExcelBasedEnergyMeterReader:
                     print(f"    Insufficient registers for unknown type at {start_address}: got {len(request.registers)}")
                     return None
             
-            # Apply unit conversion
+            # Apply unit conversion with factor if available
             if raw_value is not None:
-                converted_value = self.convert_units(raw_value, source_unit, target_unit)
+                factor = register_info.get('factor')
+                converted_value = self.convert_units(raw_value, source_unit, target_unit, factor)
                 return converted_value
             else:
                 return None
@@ -1269,6 +1339,11 @@ def create_html_template():
             background: linear-gradient(135deg, #f5e6ff, #f3e8ff);
         }
 
+        .register-badge.setup {
+            border-color: #34495e;
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+        }
+
         .register-badge.other {
             border-color: #9b59b6;
             background: linear-gradient(135deg, #faf5ff, #f3e8ff);
@@ -1839,6 +1914,7 @@ def create_html_template():
                     else if (cat === 'current') icon = '🔌';
                     else if (cat === 'power') icon = '🔋';
                     else if (cat === 'power_factor') icon = '📐';
+                    else if (cat === 'setup') icon = '🔧';
                     else icon = '📊';
                     // Section CSS class
                     let sectionClass = `${cat}-section`;
