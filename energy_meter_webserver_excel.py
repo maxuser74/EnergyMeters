@@ -27,6 +27,7 @@ last_update_time = None
 connection_status = "Disconnected"
 utilities_config = []
 registers_config = {}
+configuration_initialized = False
 
 class ExcelBasedEnergyMeterReader:
     def __init__(self):
@@ -99,9 +100,17 @@ class ExcelBasedEnergyMeterReader:
                     continue
                 end_address = int(row['Registro'])
                 description = str(row['Lettura'])
+                # UI label preference: use Title when available
+                if 'Title' in df_registri.columns and pd.notna(row['Title']):
+                    title = str(row['Title'])
+                else:
+                    title = description
                 data_type = str(row['Lenght'])
                 source_unit = str(row['Readings']) if 'Readings' in row else ''
                 target_unit = str(row['Convert to']) if 'Convert to' in row else source_unit
+                # Implement Power reading for register 273 in Watts
+                if end_address == 273:
+                    target_unit = 'W'
                 # Use 'Type' column for grouping, fallback to Lettura if missing
                 if 'Type' in df_registri.columns and pd.notna(row['Type']):
                     category = str(row['Type']).strip().lower()
@@ -127,6 +136,7 @@ class ExcelBasedEnergyMeterReader:
                 # Store register info
                 registers[start_address] = {
                     'description': description,
+                    'title': title,
                     'data_type': data_type,
                     'register_count': register_count,
                     'start_address': start_address,
@@ -282,6 +292,7 @@ class ExcelBasedEnergyMeterReader:
                     if value is not None:
                         utility_data['registers'][register_key] = {
                             'description': register_info['description'],
+                            'title': register_info.get('title', register_info['description']),
                             'value': round(value, 2) if isinstance(value, float) else value,
                             'unit': register_info.get('target_unit', ''),
                             'status': 'OK',
@@ -290,6 +301,7 @@ class ExcelBasedEnergyMeterReader:
                     else:
                         utility_data['registers'][register_key] = {
                             'description': register_info['description'],
+                            'title': register_info.get('title', register_info['description']),
                             'value': 'N/A',
                             'unit': register_info.get('target_unit', ''),
                             'status': 'ERROR',
@@ -301,6 +313,7 @@ class ExcelBasedEnergyMeterReader:
                     register_key = f"reg_{start_address}"
                     utility_data['registers'][register_key] = {
                         'description': register_info['description'],
+                        'title': register_info.get('title', register_info['description']),
                         'value': 'ERROR',
                         'unit': register_info.get('target_unit', ''),
                         'status': 'ERROR'
@@ -423,6 +436,30 @@ class ExcelBasedEnergyMeterReader:
 
 # Initialize the energy meter reader
 energy_reader = ExcelBasedEnergyMeterReader()
+
+def initialize_from_excel():
+    """Ensure Excel configurations and initial readings are loaded at startup."""
+    global configuration_initialized
+    if configuration_initialized:
+        return
+    try:
+        print("Initializing configuration from Excel files...")
+        energy_reader.load_configuration()
+        energy_reader.read_all_utilities()
+        configuration_initialized = True
+        print("Excel configuration initialization completed.")
+    except Exception as exc:
+        print(f"Failed to initialize configuration from Excel: {exc}")
+
+
+# Perform initialization immediately so startup reflects Excel content
+initialize_from_excel()
+
+
+@app.before_request
+def ensure_excel_configuration_loaded():
+    """Flask hook to guarantee Excel configuration is loaded in all run modes."""
+    initialize_from_excel()
 
 @app.route('/')
 def index():
