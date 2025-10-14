@@ -1,4 +1,16 @@
 ﻿<!DOCTYPE html>
+            // Auto-start monitoring after first render if requested
+            if (autoStartMonitoring && !didAutoStartMonitoring && data && data.readings) {
+                Object.keys(data.readings).forEach(utilityId => {
+                    try {
+                        const btn = document.querySelector(#utility- .monitor-toggle);
+                        if (btn && !monitoringIntervals.hasOwnProperty(utilityId)) {
+                            toggleMonitoring(utilityId, btn);
+                        }
+                    } catch (e) { console.warn('Auto-start monitoring failed for', utilityId, e); }
+                });
+                didAutoStartMonitoring = true;
+            }
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -557,6 +569,8 @@
         let monitoringIntervals = {}; // Store active monitoring intervals
         let chartInstances = {}; // Store chart instances for each utility
         let chartData = {}; // Store chart data history for each utility
+        let autoStartMonitoring = true; // start monitoring automatically
+        let didAutoStartMonitoring = false;
         // Monitoring interval in ms (persist in localStorage)
         let monitorIntervalMs = Number(localStorage.getItem('monitorIntervalMs') || {{ monitor_interval_ms|default(2000) }});
         const intervalInput = document.getElementById('monitorIntervalInput');
@@ -835,10 +849,8 @@
 
         // Load initial data when page loads
         document.addEventListener('DOMContentLoaded', function() {
-            loadConfiguration();
-            loadReadings();
-            
-            // No automatic refresh - user controls all updates via buttons
+            // Auto-load configuration and readings
+            refreshAll();
         });
 
         // Cleanup monitoring intervals when page is closed

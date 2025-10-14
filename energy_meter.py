@@ -343,9 +343,9 @@ energy_reader = ExcelBasedEnergyMeterReader()
 @app.route('/')
 def index():
     """Main dashboard page"""
-    default_interval_ms = 2000
+    default_interval_ms = 500
     return render_template(
-        'energy_dashboard.html',
+        'energy_dashboard_simple.html',
         utilities=utilities_config,
         registers=registers_config,
         monitor_interval_ms=default_interval_ms,
