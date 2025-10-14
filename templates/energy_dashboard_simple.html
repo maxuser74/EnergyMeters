@@ -167,8 +167,12 @@
       }
 
       let html = '';
+      let visibleCount = 0;
       for (const [utilityId, utilityData] of Object.entries(data.readings)) {
         const { label: statusLabel, className: statusClass } = mapStatus(utilityData.status);
+        if (statusLabel === 'NO') {
+          continue;
+        }
         const infoText = `${utilityData.name}, Cabinet ${utilityData.cabinet} | Node ${utilityData.node} | ${utilityData.ip_address}, `;
         const timestampFragment = utilityData.timestamp ? `, ${utilityData.timestamp}` : '';
 
@@ -183,8 +187,13 @@
             </div>
             ${renderSingleRow(utilityData)}
           </div>`;
+        visibleCount += 1;
       }
-      grid.innerHTML = html;
+      if (visibleCount === 0) {
+        grid.innerHTML = '<div class="text-center text-slate-400 py-8"><h3 class="font-medium text-slate-200">No healthy utilities</h3><p>Waiting for devices to become available...</p></div>';
+      } else {
+        grid.innerHTML = html;
+      }
     }
   </script>
 </body>
