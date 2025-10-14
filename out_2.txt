@@ -1,0 +1,250 @@
+            'id': utility_id,
+            'name': utility_name,
+            'cabinet': utility['cabinet'],
+            'node': node_id,
+            'ip_address': ip_address,
+            'status': 'OK',
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'registers': {}
+        }
+        
+        try:
+            # Connect to the device
+            connection_result = client.connect()
+            if not connection_result:
+                utility_data['status'] = 'CONNECTION_FAILED'
+                return utility_data
+            
+            # Read all registers
+            for start_address, register_info in registers_config.items():
+                try:
+                    value = self.read_register_value(client, register_info, node_id)
+                    register_key = f"reg_{start_address}"
+                    
+                    if value is not None:
+                        utility_data['registers'][register_key] = {
+                            'description': register_info['description'],
+                            'value': round(value, 2) if isinstance(value, float) else value,
+                            'unit': register_info.get('target_unit', ''),
+                            'status': 'OK',
+                            'category': register_info.get('category', 'other')
+                        }
+                    else:
+                        utility_data['registers'][register_key] = {
+                            'description': register_info['description'],
+                            'value': 'N/A',
+                            'unit': register_info.get('target_unit', ''),
+                            'status': 'ERROR',
+                            'category': register_info.get('category', 'other')
+                        }
+                        utility_data['status'] = 'PARTIAL'
+                        
+                except Exception as e:
+                    register_key = f"reg_{start_address}"
+                    utility_data['registers'][register_key] = {
+                        'description': register_info['description'],
+                        'value': 'ERROR',
+                        'unit': register_info.get('target_unit', ''),
+                        'status': 'ERROR',
+                        'category': register_info.get('category', 'other')
+                    }
+                    utility_data['status'] = 'PARTIAL'
+                    print(f"    Exception reading register {start_address}: {e}")
+            
+        except Exception as e:
+            utility_data['status'] = f'EXCEPTION: {str(e)[:50]}'
+            print(f"Exception reading utility {utility_name}: {e}")
+            
+        finally:
+            try:
+                client.close()
+            except:
+                pass
+        
+        return utility_data
+
+    def read_all_utilities(self):
+        """Read all utilities and update global readings"""
+        global latest_readings, last_update_time, connection_status
+        
+        print(f"Reading all {len(utilities_config)} utilities...")
+        
+        all_readings = {}
+        successful_count = 0
+        
+        for utility in utilities_config:
+            utility_data = self.read_single_utility(utility)
+            all_readings[utility_data['id']] = utility_data
+            
+            if utility_data['status'] in ['OK', 'PARTIAL']:
+                successful_count += 1
+        
+        # Update global variables
+        latest_readings = all_readings
+        last_update_time = datetime.now()
+        
+        if successful_count > 0:
+            connection_status = f"Connected ({successful_count}/{len(utilities_config)} utilities)"
+        else:
+            connection_status = "All connections failed"
+        
+        print(f"Completed reading: {successful_count}/{len(utilities_config)} utilities successful")
+        
+        return all_readings
+
+# Initialize the energy meter reader
+energy_reader = ExcelBasedEnergyMeterReader()
+
+@app.route('/')
+def index():
+    """Main dashboard page"""
+    return render_template('energy_dashboard.html', 
+                         utilities=utilities_config,
+                         registers=registers_config)
+
+@app.route('/api/readings')
+def get_readings():
+    """API endpoint to get all current readings"""
+    global latest_readings, last_update_time, connection_status
+    
+    return jsonify({
+        'readings': latest_readings,
+        'last_update': last_update_time.strftime('%Y-%m-%d %H:%M:%S') if last_update_time else None,
+        'connection_status': connection_status,
+        'utilities_count': len(utilities_config),
+        'registers_count': len(registers_config)
+    })
+
+@app.route('/api/refresh_all')
+def refresh_all():
+    """API endpoint to refresh all utilities and reload configuration"""
+    global utilities_config, registers_config
+    
+    print("Manual refresh of all utilities requested - reloading configuration files")
+    
+    try:
+        # Store current configuration for comparison
+        old_utilities = [u['id'] for u in utilities_config] if utilities_config else []
+        old_registers = list(registers_config.keys()) if registers_config else []
+        
+        # Reload configuration from Excel files
+        print("Reloading Utenze.xlsx and registri.xlsx...")
+        energy_reader.load_configuration()
+        
+        # Update global variables with new configuration
+        utilities_config = energy_reader.load_utilities_from_excel()
+        registers_config = energy_reader.load_registers_from_excel()
+        
+        # Compare configurations to detect changes
+        new_utilities = [u['id'] for u in utilities_config]
+        new_registers = list(registers_config.keys())
+        
+        added_utilities = [u for u in new_utilities if u not in old_utilities]
+        removed_utilities = [u for u in old_utilities if u not in new_utilities]
+        added_registers = [r for r in new_registers if r not in old_registers]
+        removed_registers = [r for r in old_registers if r not in new_registers]
+        
+        # Create detailed change message
+        changes = []
+        if added_utilities:
+            changes.append(f"Added {len(added_utilities)} utilities: {', '.join(added_utilities)}")
+        if removed_utilities:
+            changes.append(f"Removed {len(removed_utilities)} utilities: {', '.join(removed_utilities)}")
+        if added_registers:
+            changes.append(f"Added {len(added_registers)} registers")
+        if removed_registers:
+            changes.append(f"Removed {len(removed_registers)} registers")
+        
+        change_message = "; ".join(changes) if changes else "No changes detected"
+        
+        print(f"Configuration reloaded: {len(utilities_config)} utilities, {len(registers_config)} registers")
+        print(f"Changes: {change_message}")
+        
+        # Read all utilities with new configuration
+        readings = energy_reader.read_all_utilities()
+        
+        return jsonify({
+            'success': True,
+            'readings': readings,
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'message': f'Configuration reloaded: {len(utilities_config)} utilities, {len(registers_config)} registers',
+            'changes': change_message,
+            'utilities_count': len(utilities_config),
+            'registers_count': len(registers_config),
+            'added_utilities': added_utilities,
+            'removed_utilities': removed_utilities
+        })
+        
+    except Exception as e:
+        print(f"Error reloading configuration: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'Failed to reload configuration: {str(e)}',
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }), 500
+
+@app.route('/api/refresh_utility/<utility_id>')
+def refresh_utility(utility_id):
+    """API endpoint to refresh a single utility"""
+    global latest_readings
+    
+    # Find the utility configuration
+    utility = None
+    for u in utilities_config:
+        if u['id'] == utility_id:
+            utility = u
+            break
+    
+    if not utility:
+        print(f"Utility {utility_id} not found in current configuration - may have been removed")
+        return jsonify({
+            'success': False, 
+            'error': 'Utility not found in current configuration. Try refreshing all to reload configuration.',
+            'suggestion': 'reload_config'
+        }), 404
+    
+    print(f"Manual refresh requested for utility: {utility['utility_name']}")
+    
+    # Read the single utility
+    utility_data = energy_reader.read_single_utility(utility)
+    
+    # Update the global readings for this utility
+    if latest_readings is None:
+        latest_readings = {}
+    latest_readings[utility_id] = utility_data
+    
+    return jsonify({
+        'success': True,
+        'utility_data': utility_data,
+        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    })
+
+@app.route('/api/configuration')
+def get_configuration():
+    """API endpoint to get current configuration"""
+    return jsonify({
+        'utilities': utilities_config,
+        'registers': {str(k): v for k, v in registers_config.items()},
+        'utilities_count': len(utilities_config),
+        'registers_count': len(registers_config)
+    })
+
+def background_reading_thread():
+    """Background thread to perform initial reading only at startup"""
+    global energy_reader
+    
+    print("Starting initial background reading...")
+    
+    try:
+        print("Background reading cycle starting...")
+        energy_reader.read_all_utilities()
+        print("Background reading cycle completed")
+        print("Initial reading finished. Further readings will be user-controlled only.")
+        
+    except Exception as e:
+        print(f"Error in initial background reading: {e}")
+        print("Initial reading failed, but server will continue. Use manual refresh buttons.")
+
+# Create the HTML template directory and file
+def create_html_template():
+    """Create the HTML template for the dashboard"""

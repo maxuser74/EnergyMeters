@@ -1,0 +1,200 @@
+        .register-badge.error {
+            border-color: #e74c3c;
+            background: #fdf2f2;
+        }
+
+        .voltage-current-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 25px;
+        }
+
+        .readings-section.voltage-section,
+        .readings-section.current-section {
+            flex: 1 1 0;
+            min-width: 0;
+            margin-bottom: 0;
+        }
+
+        @media (max-width: 768px) {
+            .status-bar {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 15px;
+            }
+
+            .utility-header {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 15px;
+            }
+
+            .utility-header-actions {
+                justify-content: center;
+                flex-wrap: wrap;
+            }
+
+            .registers-grid {
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                gap: 10px;
+            }
+
+            .register-badge {
+                padding: 10px;
+            }
+
+            .register-name {
+                font-size: 0.75em;
+                min-height: 28px;
+            }
+
+            .register-value {
+                font-size: 1.4em;
+            }
+
+            .section-title {
+                font-size: 1em;
+                padding: 6px 10px;
+            }
+
+            .header h1 {
+                font-size: 2em;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .registers-grid {
+                grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            }
+
+            .register-badge {
+                padding: 8px;
+            }
+
+            .register-name {
+                font-size: 0.7em;
+                min-height: 24px;
+            }
+
+            .register-value {
+                font-size: 1.2em;
+            }
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 50px;
+            color: #7f8c8d;
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border: 1px solid #f5c6cb;
+        }
+
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border: 1px solid #c3e6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏭 Energy Meter Dashboard</h1>
+            <p>Real-time monitoring of energy meters from Excel configuration</p>
+        </div>
+
+        <div class="status-bar">
+            <div class="status-item">
+                <div class="status-indicator" id="connectionIndicator"></div>
+                <span id="connectionStatus">Connecting...</span>
+            </div>
+            <div class="status-item">
+                <span id="lastUpdate">Last Update: Loading...</span>
+            </div>
+            <div class="status-item">
+                <span id="utilitiesCount">Utilities: 0</span>
+            </div>
+            <div class="status-item">
+                <span id="monitoringCount">Live Monitoring: 0</span>
+            </div>
+            <button class="refresh-all-btn" id="refreshAllBtn" onclick="refreshAll()">
+                🔄 Refresh All
+            </button>
+        </div>
+
+        <div class="utilities-grid" id="utilitiesGrid">
+            <div class="no-data">
+                <h3>Loading utilities...</h3>
+                <p>Please wait while we load the configuration from Excel files.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let isRefreshing = false;
+        let monitoringIntervals = {}; // Store active monitoring intervals
+        let chartInstances = {}; // Store chart instances for each utility
+        let chartData = {}; // Store chart data history for each utility
+
+        // Chart configuration
+        const chartConfig = {
+            voltage: {
+                backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                borderColor: 'rgba(231, 76, 60, 1)',
+                pointBackgroundColor: 'rgba(231, 76, 60, 1)'
+            },
+            current: {
+                backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                borderColor: 'rgba(52, 152, 219, 1)',
+                pointBackgroundColor: 'rgba(52, 152, 219, 1)'
+            }
+        };
+
+        function initializeCharts(utilityId) {
+            // Initialize chart data storage for this utility
+            if (!chartData[utilityId]) {
+                chartData[utilityId] = {
+                    voltage: { labels: [], datasets: [] },
+                    current: { labels: [], datasets: [] }
+                };
+            }
+
+            // Initialize chart instances
+            if (!chartInstances[utilityId]) {
+                chartInstances[utilityId] = { voltage: null, current: null };
+            }
+
+            // Create voltage chart
+            const voltageCanvas = document.getElementById(`voltage-chart-${utilityId}`);
+            if (voltageCanvas) {
+                // Destroy existing chart if it exists
+                if (chartInstances[utilityId].voltage) {
+                    try {
+                        chartInstances[utilityId].voltage.destroy();
+                    } catch (e) {
+                        console.log(`Error destroying voltage chart for ${utilityId}:`, e);
+                    }
+                }
+                
+                try {
+                    chartInstances[utilityId].voltage = new Chart(voltageCanvas, {
+                        type: 'line',
+                        data: chartData[utilityId].voltage,
+                        options: getChartOptions('Voltage (V)')
+                    });
+                    console.log(`Voltage chart initialized for ${utilityId}`);
+                } catch (e) {
+                    console.error(`Error creating voltage chart for ${utilityId}:`, e);
+                }
+            }

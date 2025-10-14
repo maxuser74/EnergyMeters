@@ -1,0 +1,250 @@
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .registers-container {
+            padding: 20px;
+        }
+
+        .readings-section {
+            margin-bottom: 25px;
+        }
+
+        .section-title {
+            font-size: 1.1em;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 15px;
+            padding: 8px 12px;
+            border-radius: 5px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .voltage-section .section-title {
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            color: white;
+        }
+
+        .current-section .section-title {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+        }
+
+        .energy-section .section-title {
+            background: linear-gradient(135deg, #27ae60, #229954);
+            color: white;
+        }
+
+        .other-section .section-title {
+            background: linear-gradient(135deg, #9b59b6, #8e44ad);
+            color: white;
+        }
+
+        .registers-grid {
+            display: flex;
+            flex-wrap: nowrap;
+            gap: 10px;
+            overflow-x: auto;
+        }
+
+        .registers-grid.voltage-grid, .registers-grid.current-grid {
+            gap: 6px;
+        }
+
+        .register-badge {
+            background: white;
+            border: 2px solid #e0e0e0;
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .register-badge.voltage, .register-badge.current {
+            padding: 5px;
+        }
+
+        .register-name {
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 6px;
+            font-size: 0.7em;
+            line-height: 1.1;
+            min-height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .register-badge.voltage .register-name, .register-badge.current .register-name {
+            font-size: 0.65em;
+            min-height: 24px;
+            margin-bottom: 4px;
+        }
+
+        .register-measure {
+            display: flex;
+            align-items: baseline;
+            justify-content: center;
+            gap: 4px;
+            margin-bottom: 3px;
+        }
+
+        .register-value {
+            font-size: 1.4em;
+            font-weight: bold;
+        }
+
+        .register-unit {
+            font-size: 0.8em;
+        }
+
+        .register-badge.voltage .register-value, .register-badge.current .register-value {
+            font-size: 1.1em;
+        }
+
+
+        .register-badge.voltage {
+            border-color: #e74c3c;
+            background: linear-gradient(135deg, #fff5f5, #ffeaea);
+        }
+
+        .register-badge.current {
+            border-color: #3498db;
+            background: linear-gradient(135deg, #f0f8ff, #e6f3ff);
+        }
+
+        .register-badge.energy {
+            border-color: #27ae60;
+            background: linear-gradient(135deg, #f0fff4, #e6ffed);
+        }
+
+        .register-badge.other {
+            border-color: #9b59b6;
+            background: linear-gradient(135deg, #faf5ff, #f3e8ff);
+        }
+
+        /* Dynamic badge color for new categories (fallback: HSL by category name hash) */
+        [class*="register-badge."], .register-badge {
+            /* fallback, will be overridden below */
+        }
+        /* Example for a few possible new categories */
+        .register-badge.frequency {
+            border-color: #f39c12;
+            background: linear-gradient(135deg, #fffbe6, #fff3cd);
+        }
+        .register-badge.temperature {
+            border-color: #16a085;
+            background: linear-gradient(135deg, #e6fffa, #e0f7fa);
+        }
+        .register-badge.power_factor {
+            border-color: #8e44ad;
+            background: linear-gradient(135deg, #f5e6ff, #f3e8ff);
+        }
+        /* Generic fallback for any unknown category: use HSL based on category name hash */
+        .register-badge[data-category] {
+            /* JS will set style if not matched above */
+        }
+
+        .register-badge.error {
+            border-color: #e74c3c;
+            background: #fdf2f2;
+        }
+
+        .voltage-current-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 25px;
+        }
+
+        .readings-section.voltage-section,
+        .readings-section.current-section {
+            flex: 1 1 0;
+            min-width: 0;
+            margin-bottom: 0;
+        }
+
+        @media (max-width: 768px) {
+            .status-bar {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 15px;
+            }
+
+            .utility-header {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 15px;
+            }
+
+            .utility-header-actions {
+                justify-content: center;
+                flex-wrap: wrap;
+            }
+
+            .registers-grid {
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                gap: 10px;
+            }
+
+            .register-badge {
+                padding: 10px;
+            }
+
+            .register-name {
+                font-size: 0.75em;
+                min-height: 28px;
+            }
+
+            .register-value {
+                font-size: 1.4em;
+            }
+
+            .section-title {
+                font-size: 1em;
+                padding: 6px 10px;
+            }
+
+            .header h1 {
+                font-size: 2em;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .registers-grid {
+                grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            }
+
+            .register-badge {
+                padding: 8px;
+            }
+
+            .register-name {
+                font-size: 0.7em;
+                min-height: 24px;
+            }
+
+            .register-value {
+                font-size: 1.2em;
+            }
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 50px;
+            color: #7f8c8d;
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;

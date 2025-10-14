@@ -1,0 +1,250 @@
+#!/usr/bin/env python3
+"""
+Energy Meter Web Server - Enhanced with Excel Configuration
+Displays energy meter readings in a web interface using configuration from Excel files:
+- Utenze.xlsx: Contains the specific utilities to monitor (Cabinet, Node, Utility name)
+- registri.xlsx: Contains the registers to read with Report column filtering
+Features individual machine refresh buttons and real-time updates
+"""
+
+from flask import Flask, render_template, jsonify, request
+from pymodbus.client import ModbusTcpClient
+from pymodbus.exceptions import ConnectionException
+import struct
+import time
+from datetime import datetime
+import threading
+import json
+import pandas as pd
+import os
+
+app = Flask(__name__)
+
+# Global variables to store the latest readings
+latest_readings = {}
+last_update_time = None
+connection_status = "Disconnected"
+utilities_config = []
+registers_config = {}
+
+class ExcelBasedEnergyMeterReader:
+    def __init__(self):
+        self.load_configuration()
+        
+    def load_configuration(self):
+        """Load configuration from Excel files"""
+        global utilities_config, registers_config
+        
+        # Load utilities from Excel
+        utilities_config = self.load_utilities_from_excel()
+        
+        # Load registers from Excel (only those marked for reporting)
+        registers_config = self.load_registers_from_excel()
+        
+        print(f"Loaded {len(utilities_config)} utilities and {len(registers_config)} registers")
+        
+    def load_utilities_from_excel(self):
+        """Load utilities configuration from Utenze.xlsx"""
+        try:
+            df_utenze = pd.read_excel('Utenze.xlsx')
+            utilities = []
+            
+            # Cabinet IP mapping
+            cabinet_ips = {
+                1: '192.168.156.75',
+                2: '192.168.156.76', 
+                3: '192.168.156.77'
+            }
+            
+            for _, row in df_utenze.iterrows():
+                cabinet = int(row['Cabinet'])
+                node = int(row['Nodo'])
+                utility_name = str(row['Utenza'])
+                ip_address = cabinet_ips.get(cabinet, None)
+                
+                if ip_address:
+                    utilities.append({
+                        'id': f"cabinet{cabinet}_node{node}",
+                        'cabinet': cabinet,
+                        'node': node,
+                        'utility_name': utility_name,
+                        'ip_address': ip_address,
+                        'port': 502
+                    })
+                else:
+                    print(f"WARNING: Unknown cabinet {cabinet} for utility {utility_name}")
+            
+            print(f"Loaded {len(utilities)} utilities from Utenze.xlsx")
+            return utilities
+            
+        except FileNotFoundError:
+            print("ERROR: Utenze.xlsx file not found!")
+            return []
+        except Exception as e:
+            print(f"ERROR loading utilities from Utenze.xlsx: {e}")
+            return []
+
+    def load_registers_from_excel(self):
+        """Load register configuration from registri.xlsx (only Report=Yes registers), and group by 'Type' column for badge grouping"""
+        try:
+            df_registri = pd.read_excel('registri.xlsx')
+            registers = {}
+            print("Loading registers from registri.xlsx (Report=Yes only):")
+            for _, row in df_registri.iterrows():
+                # Check if this register should be reported
+                report_status = str(row['Report']).strip().lower() if 'Report' in row else 'yes'
+                if report_status not in ['yes', 'y', '1', 'true']:
+                    print(f"  Skipping register (Report={row['Report']}): {row['Lettura']}")
+                    continue
+                end_address = int(row['Registro'])
+                description = str(row['Lettura'])
+                data_type = str(row['Lenght'])
+                source_unit = str(row['Readings']) if 'Readings' in row else ''
+                target_unit = str(row['Convert to']) if 'Convert to' in row else source_unit
+                # Use 'Type' column for grouping, fallback to Lettura if missing
+                if 'Type' in df_registri.columns and pd.notna(row['Type']):
+                    category = str(row['Type']).strip().replace(' ', '_').replace('/', '_').lower()
+                else:
+                    category = description.strip().replace(' ', '_').replace('/', '_').lower()
+                # Calculate register count and start address based on data type
+                if data_type.lower() == 'float':
+                    register_count = 2
+                    start_address = end_address - 1
+                elif 'long long' in data_type.lower():
+                    register_count = 4
+                    start_address = end_address - 3
+                else:
+                    register_count = 2
+                    start_address = end_address - 1
+                # Store register info
+                registers[start_address] = {
+                    'description': description,
+                    'data_type': data_type,
+                    'register_count': register_count,
+                    'start_address': start_address,
+                    'end_address': end_address,
+                    'source_unit': source_unit,
+                    'target_unit': target_unit,
+                    'category': category
+                }
+                print(f"  ✅ Register: {description} (Type: {category}) (Address: {start_address}-{end_address})")
+            print(f"Loaded {len(registers)} registers for reporting")
+            return registers
+        except FileNotFoundError:
+            print("ERROR: registri.xlsx file not found!")
+            return {}
+        except Exception as e:
+            print(f"ERROR loading registers from registri.xlsx: {e}")
+            return {}
+
+    def convert_units(self, value, source_unit, target_unit):
+        """Convert value from source unit to target unit"""
+        if value is None:
+            return None
+        
+        # Normalize unit names
+        source = source_unit.lower().replace(' ', '').replace('_', '')
+        target = target_unit.lower().replace(' ', '').replace('_', '')
+        
+        # If source and target are the same, no conversion needed
+        if source == target:
+            return value
+        
+        # Define conversion rules
+        conversions = {
+            ('tenthofwatts', 'kwh'): lambda x: x / 10000.0,
+            ('w/10', 'kwh'): lambda x: x / 10000.0,
+            ('watts', 'kwh'): lambda x: x / 3600000.0,
+            ('wh', 'kwh'): lambda x: x / 1000.0,
+            ('tenthofwatts', 'w'): lambda x: x / 10.0,
+            ('w/10', 'w'): lambda x: x / 10.0,
+            ('a', 'a'): lambda x: x,
+            ('v', 'v'): lambda x: x,
+        }
+        
+        # Try to find a conversion
+        conversion_key = (source, target)
+        if conversion_key in conversions:
+            converted_value = conversions[conversion_key](value)
+            return round(converted_value, 3)
+        
+        # If no conversion found, return original value
+        return value
+
+    def read_register_value(self, client, register_info, node_id):
+        """Read a register value based on its data type and length, then apply unit conversion"""
+        start_address = register_info['start_address']
+        register_count = register_info['register_count']
+        data_type = register_info['data_type']
+        source_unit = register_info.get('source_unit', '')
+        target_unit = register_info.get('target_unit', source_unit)
+        
+        try:
+            # Read the required number of registers
+            request = client.read_holding_registers(address=start_address, count=register_count, device_id=node_id)
+            
+            if request.isError():
+                return None
+            
+            # Process based on data type to get raw value
+            raw_value = None
+            
+            if data_type.lower() == 'float':
+                # 32-bit float: 2 registers
+                if len(request.registers) < 2:
+                    return None
+                high_word = request.registers[0]
+                low_word = request.registers[1]
+                
+                # Convert to 32-bit float: word order is little endian
+                packed_data = struct.pack('>HH', low_word, high_word)
+                raw_value = struct.unpack('>f', packed_data)[0]
+                
+            elif 'long long' in data_type.lower():
+                # 64-bit signed long long: 4 registers
+                if len(request.registers) < 4:
+                    return None
+                
+                word1 = request.registers[0]
+                word2 = request.registers[1] 
+                word3 = request.registers[2]
+                word4 = request.registers[3]
+                
+                packed_data = struct.pack('>HHHH', word4, word3, word2, word1)
+                raw_value = struct.unpack('>q', packed_data)[0]
+                
+            else:
+                # Unknown type, try as float
+                if len(request.registers) >= 2:
+                    high_word = request.registers[0]
+                    low_word = request.registers[1]
+                    packed_data = struct.pack('>HH', low_word, high_word)
+                    raw_value = struct.unpack('>f', packed_data)[0]
+                else:
+                    return None
+            
+            # Apply unit conversion
+            if raw_value is not None:
+                converted_value = self.convert_units(raw_value, source_unit, target_unit)
+                return converted_value
+            else:
+                return None
+                    
+        except Exception as e:
+            print(f"    ERROR reading register {start_address}: {e}")
+            return None
+
+    def read_single_utility(self, utility):
+        """Read all registers for a single utility"""
+        utility_id = utility['id']
+        utility_name = utility['utility_name']
+        ip_address = utility['ip_address']
+        port = utility['port']
+        node_id = utility['node']
+        
+        print(f"Reading utility: {utility_name} (IP: {ip_address}, Node: {node_id})")
+        
+        # Create Modbus TCP client
+        client = ModbusTcpClient(ip_address, port=port, timeout=3)
+        
+        utility_data = {

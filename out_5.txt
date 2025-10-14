@@ -1,0 +1,250 @@
+            border: 1px solid #f5c6cb;
+        }
+
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border: 1px solid #c3e6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏭 Energy Meter Dashboard</h1>
+            <p>Real-time monitoring of energy meters from Excel configuration</p>
+        </div>
+
+        <div class="status-bar">
+            <div class="status-item">
+                <div class="status-indicator" id="connectionIndicator"></div>
+                <span id="connectionStatus">Connecting...</span>
+            </div>
+            <div class="status-item">
+                <span id="lastUpdate">Last Update: Loading...</span>
+            </div>
+            <div class="status-item">
+                <span id="utilitiesCount">Utilities: 0</span>
+            </div>
+            <div class="status-item">
+                <span id="monitoringCount">Live Monitoring: 0</span>
+            </div>
+            <button class="refresh-all-btn" id="refreshAllBtn" onclick="refreshAll()">
+                🔄 Refresh All
+            </button>
+        </div>
+
+        <div class="utilities-grid" id="utilitiesGrid">
+            <div class="no-data">
+                <h3>Loading utilities...</h3>
+                <p>Please wait while we load the configuration from Excel files.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let isRefreshing = false;
+        let monitoringIntervals = {}; // Store active monitoring intervals
+        let chartInstances = {}; // Store chart instances for each utility
+        let chartData = {}; // Store chart data history for each utility
+
+        // Chart configuration
+        const chartConfig = {
+            voltage: {
+                backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                borderColor: 'rgba(231, 76, 60, 1)',
+                pointBackgroundColor: 'rgba(231, 76, 60, 1)'
+            },
+            current: {
+                backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                borderColor: 'rgba(52, 152, 219, 1)',
+                pointBackgroundColor: 'rgba(52, 152, 219, 1)'
+            }
+        };
+
+        function initializeCharts(utilityId) {
+            // Initialize chart data storage for this utility
+            if (!chartData[utilityId]) {
+                chartData[utilityId] = {
+                    voltage: { labels: [], datasets: [] },
+                    current: { labels: [], datasets: [] }
+                };
+            }
+
+            // Initialize chart instances
+            if (!chartInstances[utilityId]) {
+                chartInstances[utilityId] = { voltage: null, current: null };
+            }
+
+            // Create voltage chart
+            const voltageCanvas = document.getElementById(`voltage-chart-${utilityId}`);
+            if (voltageCanvas) {
+                // Destroy existing chart if it exists
+                if (chartInstances[utilityId].voltage) {
+                    try {
+                        chartInstances[utilityId].voltage.destroy();
+                    } catch (e) {
+                        console.log(`Error destroying voltage chart for ${utilityId}:`, e);
+                    }
+                }
+                
+                try {
+                    chartInstances[utilityId].voltage = new Chart(voltageCanvas, {
+                        type: 'line',
+                        data: chartData[utilityId].voltage,
+                        options: getChartOptions('Voltage (V)')
+                    });
+                    console.log(`Voltage chart initialized for ${utilityId}`);
+                } catch (e) {
+                    console.error(`Error creating voltage chart for ${utilityId}:`, e);
+                }
+            }
+
+            // Create current chart
+            const currentCanvas = document.getElementById(`current-chart-${utilityId}`);
+            if (currentCanvas) {
+                // Destroy existing chart if it exists
+                if (chartInstances[utilityId].current) {
+                    try {
+                        chartInstances[utilityId].current.destroy();
+                    } catch (e) {
+                        console.log(`Error destroying current chart for ${utilityId}:`, e);
+                    }
+                }
+                
+                try {
+                    chartInstances[utilityId].current = new Chart(currentCanvas, {
+                        type: 'line',
+                        data: chartData[utilityId].current,
+                        options: getChartOptions('Current (A)')
+                    });
+                    console.log(`Current chart initialized for ${utilityId}`);
+                } catch (e) {
+                    console.error(`Error creating current chart for ${utilityId}:`, e);
+                }
+            }
+        }
+
+        function getChartOptions(title) {
+            return {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top'
+                    },
+                    title: {
+                        display: false
+                    }
+                },
+                scales: {
+                    x: {
+                        display: true,
+                        title: {
+                            display: true,
+                            text: 'Time'
+                        }
+                    },
+                    y: {
+                        display: true,
+                        title: {
+                            display: true,
+                            text: title
+                        }
+                    }
+                },
+                elements: {
+                    point: {
+                        radius: 2
+                    },
+                    line: {
+                        tension: 0.1
+                    }
+                }
+            };
+        }
+
+        function clearCharts(utilityId) {
+            if (chartData[utilityId]) {
+                chartData[utilityId].voltage = { labels: [], datasets: [] };
+                chartData[utilityId].current = { labels: [], datasets: [] };
+            }
+
+            if (chartInstances[utilityId]) {
+                if (chartInstances[utilityId].voltage) {
+                    chartInstances[utilityId].voltage.data = chartData[utilityId].voltage;
+                    chartInstances[utilityId].voltage.update();
+                }
+                if (chartInstances[utilityId].current) {
+                    chartInstances[utilityId].current.data = chartData[utilityId].current;
+                    chartInstances[utilityId].current.update();
+                }
+            }
+        }
+
+        function updateCharts(utilityId, utilityData) {
+            if (!chartData[utilityId] || !utilityData.registers) return;
+
+            // Check if chart instances exist
+            if (!chartInstances[utilityId] || 
+                !chartInstances[utilityId].voltage || 
+                !chartInstances[utilityId].current) {
+                console.log(`Chart instances missing for ${utilityId}, skipping update`);
+                return;
+            }
+
+            const now = new Date().toLocaleTimeString();
+            const maxDataPoints = 50; // Keep last 50 data points
+
+            // Prepare voltage and current data
+            const voltageData = {};
+            const currentData = {};
+
+            // Extract voltage and current values
+            for (const [regKey, regData] of Object.entries(utilityData.registers)) {
+                const description = regData.description.toLowerCase();
+                const unit = (regData.unit || '').toLowerCase();
+                const value = parseFloat(regData.value);
+
+                if (!isNaN(value)) {
+                    if (description.includes('voltage') || description.includes('tensione') || unit === 'v') {
+                        voltageData[regData.description] = value;
+                    } else if (description.includes('current') || description.includes('corrente') || unit === 'a') {
+                        currentData[regData.description] = value;
+                    }
+                }
+            }
+
+            // Update voltage chart data
+            if (Object.keys(voltageData).length > 0) {
+                if (chartData[utilityId].voltage.labels.length >= maxDataPoints) {
+                    chartData[utilityId].voltage.labels.shift();
+                    chartData[utilityId].voltage.datasets.forEach(dataset => dataset.data.shift());
+                }
+
+                chartData[utilityId].voltage.labels.push(now);
+
+                // Update datasets
+                Object.entries(voltageData).forEach(([description, value], index) => {
+                    if (!chartData[utilityId].voltage.datasets[index]) {
+                        chartData[utilityId].voltage.datasets[index] = {
+                            label: description,
+                            data: [],
+                            ...chartConfig.voltage,
+                            borderColor: `hsl(${index * 30}, 70%, 50%)`,
+                            backgroundColor: `hsla(${index * 30}, 70%, 50%, 0.1)`
+                        };
+                    }
+                    chartData[utilityId].voltage.datasets[index].data.push(value);
+                });
+            }
+
+            // Update current chart data
+            if (Object.keys(currentData).length > 0) {
+                if (chartData[utilityId].current.labels.length >= maxDataPoints) {
+                    chartData[utilityId].current.labels.shift();
+                    chartData[utilityId].current.datasets.forEach(dataset => dataset.data.shift());

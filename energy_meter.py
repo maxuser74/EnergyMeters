@@ -8,16 +8,10 @@ Features individual machine refresh buttons and real-time updates
 """
 
 from flask import Flask, render_template, jsonify, request
-from pymodbus.constants import Endian
 from pymodbus.client import ModbusTcpClient
-from pymodbus.exceptions import ConnectionException
 import struct
-import time
 from datetime import datetime
-import threading
-import json
 import pandas as pd
-import os
 
 app = Flask(__name__)
 
@@ -182,7 +176,7 @@ class ExcelBasedEnergyMeterReader:
         
         try:
             # Read the required number of registers
-            request = client.read_holding_registers(address=start_address, count=register_count, slave=node_id)
+            request = client.read_holding_registers(address=start_address, count=register_count, device_id=node_id)
             
             if request.isError():
                 return None
@@ -349,9 +343,13 @@ energy_reader = ExcelBasedEnergyMeterReader()
 @app.route('/')
 def index():
     """Main dashboard page"""
-    return render_template('energy_dashboard.html', 
-                         utilities=utilities_config,
-                         registers=registers_config)
+    default_interval_ms = 2000
+    return render_template(
+        'energy_dashboard.html',
+        utilities=utilities_config,
+        registers=registers_config,
+        monitor_interval_ms=default_interval_ms,
+    )
 
 @app.route('/api/readings')
 def get_readings():
@@ -374,15 +372,42 @@ def refresh_all():
     print("Manual refresh of all utilities requested - reloading configuration files")
     
     try:
+        # Store current configuration for comparison
+        old_utilities = [u['id'] for u in utilities_config] if utilities_config else []
+        old_registers = list(registers_config.keys()) if registers_config else []
+        
         # Reload configuration from Excel files
-        print("Reloading configuration from Excel files...")
+        print("Reloading Utenze.xlsx and registri.xlsx...")
         energy_reader.load_configuration()
         
         # Update global variables with new configuration
         utilities_config = energy_reader.load_utilities_from_excel()
         registers_config = energy_reader.load_registers_from_excel()
         
+        # Compare configurations to detect changes
+        new_utilities = [u['id'] for u in utilities_config]
+        new_registers = list(registers_config.keys())
+        
+        added_utilities = [u for u in new_utilities if u not in old_utilities]
+        removed_utilities = [u for u in old_utilities if u not in new_utilities]
+        added_registers = [r for r in new_registers if r not in old_registers]
+        removed_registers = [r for r in old_registers if r not in new_registers]
+        
+        # Create detailed change message
+        changes = []
+        if added_utilities:
+            changes.append(f"Added {len(added_utilities)} utilities: {', '.join(added_utilities)}")
+        if removed_utilities:
+            changes.append(f"Removed {len(removed_utilities)} utilities: {', '.join(removed_utilities)}")
+        if added_registers:
+            changes.append(f"Added {len(added_registers)} registers")
+        if removed_registers:
+            changes.append(f"Removed {len(removed_registers)} registers")
+        
+        change_message = "; ".join(changes) if changes else "No changes detected"
+        
         print(f"Configuration reloaded: {len(utilities_config)} utilities, {len(registers_config)} registers")
+        print(f"Changes: {change_message}")
         
         # Read all utilities with new configuration
         readings = energy_reader.read_all_utilities()
@@ -392,8 +417,11 @@ def refresh_all():
             'readings': readings,
             'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'message': f'Configuration reloaded: {len(utilities_config)} utilities, {len(registers_config)} registers',
+            'changes': change_message,
             'utilities_count': len(utilities_config),
-            'registers_count': len(registers_config)
+            'registers_count': len(registers_config),
+            'added_utilities': added_utilities,
+            'removed_utilities': removed_utilities
         })
         
     except Exception as e:
@@ -1570,10 +1598,22 @@ def create_html_template():
                             `Utilities: ${data.utilities_count} | Registers: ${data.registers_count}`;
                     }
                     
-                    // Show configuration reload message if provided
+                    // Show configuration reload message with changes if provided
                     if (data.message) {
                         console.log('Configuration reloaded:', data.message);
-                        showSuccess(data.message);
+                        let message = data.message;
+                        if (data.changes && data.changes !== "No changes detected") {
+                            message += `\nChanges: ${data.changes}`;
+                        }
+                        showSuccess(message);
+                    }
+                    
+                    // Log specific changes to console for debugging
+                    if (data.added_utilities && data.added_utilities.length > 0) {
+                        console.log('Added utilities:', data.added_utilities);
+                    }
+                    if (data.removed_utilities && data.removed_utilities.length > 0) {
+                        console.log('Removed utilities:', data.removed_utilities);
                     }
                     
                     updateUI({
@@ -1896,31 +1936,4 @@ def create_html_template():
     print("HTML template created: templates/energy_dashboard.html")
 
 if __name__ == '__main__':
-    # Avvia il server Flask sulla porta 5050
-    app.run(host='0.0.0.0', port=5050, debug=True)
-    print("Energy Meter Web Server - Excel Configuration Based")
-    print("=" * 60)
-    print()
-    
-    # Create HTML template
-    create_html_template()
-    
-    # Perform initial reading in background thread (one time only)
-    print("Performing initial reading of all utilities (startup only)...")
-    bg_thread = threading.Thread(target=background_reading_thread, daemon=True)
-    bg_thread.start()
-    
-    # Wait for initial reading to complete
-    bg_thread.join(timeout=10)  # Wait max 10 seconds for initial reading
-    
-    print(f"\nStarting web server on http://localhost:5000")
-    print(f"Configuration: {len(utilities_config)} utilities, {len(registers_config)} registers")
-    print("📋 Use 'Refresh All' or individual 'Refresh' buttons to update readings")
-    print("🔴 Use 'Monitor' buttons for real-time monitoring (2s intervals)")
-    print("Press Ctrl+C to stop the server")
-    print()
-    
-    try:
-        app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
-    except KeyboardInterrupt:
-        print("\nServer stopped by user")
+    app.run(host='0.0.0.0', port=5000, debug=True, threaded=True)
