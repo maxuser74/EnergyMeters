@@ -11,6 +11,8 @@ from flask import Flask, render_template, jsonify, request
 from pymodbus.client import ModbusTcpClient
 import struct
 from datetime import datetime
+import math
+import re
 import pandas as pd
 
 app = Flask(__name__)
@@ -43,36 +45,102 @@ class ExcelBasedEnergyMeterReader:
         """Load utilities configuration from Utenze.xlsx"""
         try:
             df_utenze = pd.read_excel('Utenze.xlsx')
-            utilities = []
-            
-            # Cabinet IP mapping
+            if df_utenze.empty:
+                print("WARNING: Utenze.xlsx is empty – no utilities loaded")
+                return []
+
+            # Normalise column names to make the reader resilient to formatting changes
+            normalised = df_utenze.copy()
+            normalised.columns = [str(c).strip().lower() for c in normalised.columns]
+
+            def pick_column(possible_names):
+                for name in possible_names:
+                    if name in normalised.columns:
+                        return name
+                return None
+
+            cabinet_col = pick_column(['cabinet', 'cabina', 'cab'])
+            node_col = pick_column(['nodo', 'node'])
+            name_col = pick_column(['utenza', 'utility', 'name', 'descrizione'])
+            ip_col = pick_column(['ip', 'ip_address', 'ip address', 'indirizzo ip', 'address'])
+            port_col = pick_column(['port', 'porta', 'tcp_port'])
+            enabled_col = pick_column(['enabled', 'enable', 'attivo', 'active', 'monitor'])
+
+            if cabinet_col is None or node_col is None or name_col is None:
+                print("ERROR: Utenze.xlsx must contain Cabinet, Nodo and Utenza columns (or recognised aliases)")
+                return []
+
+            def parse_int(value):
+                if value is None or (isinstance(value, float) and math.isnan(value)):
+                    return None
+                if isinstance(value, (int, float)):
+                    return int(value)
+                text = str(value).strip()
+                if not text:
+                    return None
+                match = re.search(r'\d+', text)
+                return int(match.group()) if match else None
+
+            def is_enabled(value):
+                if enabled_col is None:
+                    return True
+                if value is None or (isinstance(value, float) and math.isnan(value)):
+                    return False
+                text = str(value).strip().lower()
+                return text in ('1', 'yes', 'true', 'y', 'si', 'sì', 'enabled', 'on')
+
+            # Default Cabinet IP mapping retained as fallback
             cabinet_ips = {
                 1: '192.168.156.75',
-                2: '192.168.156.76', 
+                2: '192.168.156.76',
                 3: '192.168.156.77'
             }
-            
-            for _, row in df_utenze.iterrows():
-                cabinet = int(row['Cabinet'])
-                node = int(row['Nodo'])
-                utility_name = str(row['Utenza'])
-                ip_address = cabinet_ips.get(cabinet, None)
-                
-                if ip_address:
-                    utilities.append({
-                        'id': f"cabinet{cabinet}_node{node}",
-                        'cabinet': cabinet,
-                        'node': node,
-                        'utility_name': utility_name,
-                        'ip_address': ip_address,
-                        'port': 502
-                    })
-                else:
-                    print(f"WARNING: Unknown cabinet {cabinet} for utility {utility_name}")
-            
+
+            utilities = []
+            for _, row in normalised.iterrows():
+                if not is_enabled(row.get(enabled_col)):
+                    continue
+
+                cabinet = parse_int(row.get(cabinet_col))
+                node = parse_int(row.get(node_col))
+                utility_name = str(row.get(name_col) or '').strip()
+                ip_address = None
+                port = 502
+
+                if ip_col is not None:
+                    raw_ip = row.get(ip_col)
+                    if raw_ip is not None and not (isinstance(raw_ip, float) and math.isnan(raw_ip)):
+                        ip_address = str(raw_ip).strip()
+                        if ip_address == '':
+                            ip_address = None
+
+                if port_col is not None:
+                    parsed_port = parse_int(row.get(port_col))
+                    if parsed_port:
+                        port = parsed_port
+
+                if cabinet is None or node is None or not utility_name:
+                    print(f"WARNING: Skipping row with missing data (cabinet={cabinet}, node={node}, name='{utility_name}')")
+                    continue
+
+                if ip_address is None:
+                    ip_address = cabinet_ips.get(cabinet)
+                    if ip_address is None:
+                        print(f"WARNING: Cabinet {cabinet} has no IP specified in Utenze.xlsx and no default mapping – skipping {utility_name}")
+                        continue
+
+                utilities.append({
+                    'id': f"cabinet{cabinet}_node{node}",
+                    'cabinet': cabinet,
+                    'node': node,
+                    'utility_name': utility_name,
+                    'ip_address': ip_address,
+                    'port': port
+                })
+
             print(f"Loaded {len(utilities)} utilities from Utenze.xlsx")
             return utilities
-            
+
         except FileNotFoundError:
             print("ERROR: Utenze.xlsx file not found!")
             return []

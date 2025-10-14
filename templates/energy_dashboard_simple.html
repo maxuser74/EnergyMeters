@@ -169,16 +169,16 @@
       let html = '';
       for (const [utilityId, utilityData] of Object.entries(data.readings)) {
         const { label: statusLabel, className: statusClass } = mapStatus(utilityData.status);
-        const timestampFragment = utilityData.timestamp ? `<span>, ${utilityData.timestamp}</span>` : '';
+        const infoText = `${utilityData.name}, Cabinet ${utilityData.cabinet} | Node ${utilityData.node} | ${utilityData.ip_address}, `;
+        const timestampFragment = utilityData.timestamp ? `, ${utilityData.timestamp}` : '';
 
         html += `
           <div class="bg-slate-900 border border-slate-800 rounded-xl shadow mb-4" id="utility-${utilityId}">
             <div class="bg-slate-800/80 border-b border-slate-800 px-4 py-3">
-              <div class="utility-info text-slate-300 text-sm flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span class="font-semibold text-slate-100">${utilityData.name}</span>
-                <span>, Cabinet ${utilityData.cabinet} | Node ${utilityData.node} | ${utilityData.ip_address}, </span>
+              <div class="utility-info text-slate-300 text-sm flex flex-wrap items-center gap-x-1 gap-y-1">
+                <span class="font-semibold text-slate-100">${infoText}</span>
                 <span class="${statusClass} font-semibold">${statusLabel}</span>
-                ${timestampFragment}
+                <span class="text-slate-300">${timestampFragment}</span>
               </div>
             </div>
             ${renderSingleRow(utilityData)}
