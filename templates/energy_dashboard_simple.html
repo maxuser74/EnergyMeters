@@ -169,25 +169,30 @@
       let html = '';
       let visibleCount = 0;
       for (const [utilityId, utilityData] of Object.entries(data.readings)) {
-        const { label: statusLabel, className: statusClass } = mapStatus(utilityData.status);
-        if (statusLabel === 'NO') {
+        try {
+          const { label: statusLabel, className: statusClass } = mapStatus(utilityData.status);
+          if (statusLabel === 'NO') {
+            continue;
+          }
+          const infoText = `${utilityData.name}, Cabinet ${utilityData.cabinet} | Node ${utilityData.node} | ${utilityData.ip_address}, `;
+          const timestampFragment = utilityData.timestamp ? `, ${utilityData.timestamp}` : '';
+
+          html += `
+            <div class="bg-slate-900 border border-slate-800 rounded-xl shadow mb-4" id="utility-${utilityId}">
+              <div class="bg-slate-800/80 border-b border-slate-800 px-4 py-3">
+                <div class="utility-info text-slate-300 text-sm flex flex-wrap items-center gap-x-1 gap-y-1">
+                  <span class="font-semibold text-slate-100">${infoText}</span>
+                  <span class="${statusClass} font-semibold">${statusLabel}</span>
+                  <span class="text-slate-300">${timestampFragment}</span>
+                </div>
+              </div>
+              ${renderSingleRow(utilityData)}
+            </div>`;
+          visibleCount += 1;
+        } catch (err) {
+          console.error(`Failed to render utility ${utilityId}`, err);
           continue;
         }
-        const infoText = `${utilityData.name}, Cabinet ${utilityData.cabinet} | Node ${utilityData.node} | ${utilityData.ip_address}, `;
-        const timestampFragment = utilityData.timestamp ? `, ${utilityData.timestamp}` : '';
-
-        html += `
-          <div class="bg-slate-900 border border-slate-800 rounded-xl shadow mb-4" id="utility-${utilityId}">
-            <div class="bg-slate-800/80 border-b border-slate-800 px-4 py-3">
-              <div class="utility-info text-slate-300 text-sm flex flex-wrap items-center gap-x-1 gap-y-1">
-                <span class="font-semibold text-slate-100">${infoText}</span>
-                <span class="${statusClass} font-semibold">${statusLabel}</span>
-                <span class="text-slate-300">${timestampFragment}</span>
-              </div>
-            </div>
-            ${renderSingleRow(utilityData)}
-          </div>`;
-        visibleCount += 1;
       }
       if (visibleCount === 0) {
         grid.innerHTML = '<div class="text-center text-slate-400 py-8"><h3 class="font-medium text-slate-200">No healthy utilities</h3><p>Waiting for devices to become available...</p></div>';
