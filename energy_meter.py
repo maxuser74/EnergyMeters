@@ -9,11 +9,14 @@ Features individual machine refresh buttons and real-time updates
 
 from flask import Flask, render_template, jsonify, request
 from pymodbus.client import ModbusTcpClient
+from pymodbus.exceptions import ConnectionException
 import struct
+import time
 from datetime import datetime
-import math
-import re
+import threading
+import json
 import pandas as pd
+import os
 
 app = Flask(__name__)
 
@@ -23,7 +26,6 @@ last_update_time = None
 connection_status = "Disconnected"
 utilities_config = []
 registers_config = {}
-configuration_initialized = False
 
 class ExcelBasedEnergyMeterReader:
     def __init__(self):
@@ -45,102 +47,36 @@ class ExcelBasedEnergyMeterReader:
         """Load utilities configuration from Utenze.xlsx"""
         try:
             df_utenze = pd.read_excel('Utenze.xlsx')
-            if df_utenze.empty:
-                print("WARNING: Utenze.xlsx is empty – no utilities loaded")
-                return []
-
-            # Normalise column names to make the reader resilient to formatting changes
-            normalised = df_utenze.copy()
-            normalised.columns = [str(c).strip().lower() for c in normalised.columns]
-
-            def pick_column(possible_names):
-                for name in possible_names:
-                    if name in normalised.columns:
-                        return name
-                return None
-
-            cabinet_col = pick_column(['cabinet', 'cabina', 'cab'])
-            node_col = pick_column(['nodo', 'node'])
-            name_col = pick_column(['utenza', 'utility', 'name', 'descrizione'])
-            ip_col = pick_column(['ip', 'ip_address', 'ip address', 'indirizzo ip', 'address'])
-            port_col = pick_column(['port', 'porta', 'tcp_port'])
-            enabled_col = pick_column(['enabled', 'enable', 'attivo', 'active', 'monitor'])
-
-            if cabinet_col is None or node_col is None or name_col is None:
-                print("ERROR: Utenze.xlsx must contain Cabinet, Nodo and Utenza columns (or recognised aliases)")
-                return []
-
-            def parse_int(value):
-                if value is None or (isinstance(value, float) and math.isnan(value)):
-                    return None
-                if isinstance(value, (int, float)):
-                    return int(value)
-                text = str(value).strip()
-                if not text:
-                    return None
-                match = re.search(r'\d+', text)
-                return int(match.group()) if match else None
-
-            def is_enabled(value):
-                if enabled_col is None:
-                    return True
-                if value is None or (isinstance(value, float) and math.isnan(value)):
-                    return False
-                text = str(value).strip().lower()
-                return text in ('1', 'yes', 'true', 'y', 'si', 'sì', 'enabled', 'on')
-
-            # Default Cabinet IP mapping retained as fallback
+            utilities = []
+            
+            # Cabinet IP mapping
             cabinet_ips = {
                 1: '192.168.156.75',
-                2: '192.168.156.76',
+                2: '192.168.156.76', 
                 3: '192.168.156.77'
             }
-
-            utilities = []
-            for _, row in normalised.iterrows():
-                if not is_enabled(row.get(enabled_col)):
-                    continue
-
-                cabinet = parse_int(row.get(cabinet_col))
-                node = parse_int(row.get(node_col))
-                utility_name = str(row.get(name_col) or '').strip()
-                ip_address = None
-                port = 502
-
-                if ip_col is not None:
-                    raw_ip = row.get(ip_col)
-                    if raw_ip is not None and not (isinstance(raw_ip, float) and math.isnan(raw_ip)):
-                        ip_address = str(raw_ip).strip()
-                        if ip_address == '':
-                            ip_address = None
-
-                if port_col is not None:
-                    parsed_port = parse_int(row.get(port_col))
-                    if parsed_port:
-                        port = parsed_port
-
-                if cabinet is None or node is None or not utility_name:
-                    print(f"WARNING: Skipping row with missing data (cabinet={cabinet}, node={node}, name='{utility_name}')")
-                    continue
-
-                if ip_address is None:
-                    ip_address = cabinet_ips.get(cabinet)
-                    if ip_address is None:
-                        print(f"WARNING: Cabinet {cabinet} has no IP specified in Utenze.xlsx and no default mapping – skipping {utility_name}")
-                        continue
-
-                utilities.append({
-                    'id': f"cabinet{cabinet}_node{node}",
-                    'cabinet': cabinet,
-                    'node': node,
-                    'utility_name': utility_name,
-                    'ip_address': ip_address,
-                    'port': port
-                })
-
+            
+            for _, row in df_utenze.iterrows():
+                cabinet = int(row['Cabinet'])
+                node = int(row['Nodo'])
+                utility_name = str(row['Utenza'])
+                ip_address = cabinet_ips.get(cabinet, None)
+                
+                if ip_address:
+                    utilities.append({
+                        'id': f"cabinet{cabinet}_node{node}",
+                        'cabinet': cabinet,
+                        'node': node,
+                        'utility_name': utility_name,
+                        'ip_address': ip_address,
+                        'port': 502
+                    })
+                else:
+                    print(f"WARNING: Unknown cabinet {cabinet} for utility {utility_name}")
+            
             print(f"Loaded {len(utilities)} utilities from Utenze.xlsx")
             return utilities
-
+            
         except FileNotFoundError:
             print("ERROR: Utenze.xlsx file not found!")
             return []
@@ -162,18 +98,9 @@ class ExcelBasedEnergyMeterReader:
                     continue
                 end_address = int(row['Registro'])
                 description = str(row['Lettura'])
-                # Prefer Title column for UI labels when available
-                if 'Title' in df_registri.columns and pd.notna(row['Title']):
-                    title = str(row['Title'])
-                else:
-                    title = description
                 data_type = str(row['Lenght'])
                 source_unit = str(row['Readings']) if 'Readings' in row else ''
                 target_unit = str(row['Convert to']) if 'Convert to' in row else source_unit
-                # Special case: Implement Power reading for register 273 as Watts
-                # Excel shows Title = 'W' and Readings = 'Tenth of watts'
-                if end_address == 273:
-                    target_unit = 'W'
                 # Use 'Type' column for grouping, fallback to Lettura if missing
                 if 'Type' in df_registri.columns and pd.notna(row['Type']):
                     category = str(row['Type']).strip().replace(' ', '_').replace('/', '_').lower()
@@ -192,7 +119,6 @@ class ExcelBasedEnergyMeterReader:
                 # Store register info
                 registers[start_address] = {
                     'description': description,
-                    'title': title,
                     'data_type': data_type,
                     'register_count': register_count,
                     'start_address': start_address,
@@ -348,7 +274,6 @@ class ExcelBasedEnergyMeterReader:
                     if value is not None:
                         utility_data['registers'][register_key] = {
                             'description': register_info['description'],
-                            'title': register_info.get('title', register_info['description']),
                             'value': round(value, 2) if isinstance(value, float) else value,
                             'unit': register_info.get('target_unit', ''),
                             'status': 'OK',
@@ -357,7 +282,6 @@ class ExcelBasedEnergyMeterReader:
                     else:
                         utility_data['registers'][register_key] = {
                             'description': register_info['description'],
-                            'title': register_info.get('title', register_info['description']),
                             'value': 'N/A',
                             'unit': register_info.get('target_unit', ''),
                             'status': 'ERROR',
@@ -369,7 +293,6 @@ class ExcelBasedEnergyMeterReader:
                     register_key = f"reg_{start_address}"
                     utility_data['registers'][register_key] = {
                         'description': register_info['description'],
-                        'title': register_info.get('title', register_info['description']),
                         'value': 'ERROR',
                         'unit': register_info.get('target_unit', ''),
                         'status': 'ERROR',
@@ -422,40 +345,12 @@ class ExcelBasedEnergyMeterReader:
 # Initialize the energy meter reader
 energy_reader = ExcelBasedEnergyMeterReader()
 
-def initialize_from_excel():
-    """Ensure Excel configurations and initial readings are loaded at startup."""
-    global configuration_initialized
-    if configuration_initialized:
-        return
-    try:
-        print("Initializing configuration from Excel files...")
-        energy_reader.load_configuration()
-        energy_reader.read_all_utilities()
-        configuration_initialized = True
-        print("Excel configuration initialization completed.")
-    except Exception as exc:
-        print(f"Failed to initialize configuration from Excel: {exc}")
-
-
-# Perform initialization immediately so startup reflects Excel content
-initialize_from_excel()
-
-
-@app.before_request
-def ensure_excel_configuration_loaded():
-    """Flask hook to guarantee Excel configuration is loaded in all run modes."""
-    initialize_from_excel()
-
 @app.route('/')
 def index():
     """Main dashboard page"""
-    default_interval_ms = 500
-    return render_template(
-        'energy_dashboard_simple.html',
-        utilities=utilities_config,
-        registers=registers_config,
-        monitor_interval_ms=default_interval_ms,
-    )
+    return render_template('energy_dashboard.html', 
+                         utilities=utilities_config,
+                         registers=registers_config)
 
 @app.route('/api/readings')
 def get_readings():
@@ -623,7 +518,8 @@ def create_html_template():
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #0f172a;
+            color: #e5e7eb;
             min-height: 100vh;
             padding: 20px;
         }
@@ -631,17 +527,19 @@ def create_html_template():
         .container {
             max-width: 1400px;
             margin: 0 auto;
-            background: white;
+            background: #0f172a;
             border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.4);
             overflow: hidden;
+            border: 2px solid #1f2937;
         }
 
         .header {
-            background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
-            color: white;
+            background: #0f172a;
+            color: #f3f4f6;
             padding: 20px 30px;
             text-align: center;
+            border-bottom: 2px solid #1f2937;
         }
 
         .header h1 {
@@ -650,9 +548,9 @@ def create_html_template():
         }
 
         .status-bar {
-            background: #ecf0f1;
+            background: #0f172a;
             padding: 15px 30px;
-            border-bottom: 1px solid #bdc3c7;
+            border-bottom: 2px solid #1f2937;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -663,6 +561,7 @@ def create_html_template():
         .status-item {
             display: flex;
             align-items: center;
+            color: #d1d5db;
             gap: 10px;
         }
 
@@ -699,40 +598,48 @@ def create_html_template():
 
         .utilities-grid {
             padding: 30px;
+            background: #0f172a;
         }
 
         .utility-card {
-            background: white;
-            border: 1px solid #e0e0e0;
+            background: #0f172a;
+            border: 2px solid #374151;
             border-radius: 10px;
             margin-bottom: 20px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            transition: transform 0.3s, box-shadow 0.3s;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            transition: transform 0.3s, box-shadow 0.3s, border-color 0.3s;
         }
 
         .utility-card:hover {
             transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+            box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+            border-color: #4b5563;
         }
 
         .utility-header {
-            background: #f8f9fa;
+            background: #0f172a;
             padding: 20px;
-            border-bottom: 1px solid #e0e0e0;
+            border-bottom: 2px solid #374151;
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
 
         .utility-info h3 {
-            color: #2c3e50;
+            color: #f3f4f6;
             font-size: 1.3em;
             margin-bottom: 5px;
         }
 
         .utility-details {
-            color: #7f8c8d;
+            color: #9ca3af;
             font-size: 0.9em;
+        }
+
+        .timestamp {
+            color: #6b7280;
+            font-size: 0.8em;
+            margin-top: 5px;
         }
 
         .refresh-btn {
@@ -808,12 +715,54 @@ def create_html_template():
             margin-top: 5px;
         }
 
+        .power-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 1.1em;
+            margin-top: 10px;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+            transition: all 0.3s;
+        }
+
+        .power-badge:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.5);
+        }
+
+        .power-badge.high-power {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .power-badge.low-power {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+
+        .power-badge.no-data {
+            background: #95a5a6;
+        }
+
+        .power-badge .power-label {
+            font-size: 0.7em;
+            opacity: 0.9;
+            display: block;
+        }
+
+        .power-badge .power-value {
+            font-size: 1.3em;
+            display: block;
+            margin-top: 2px;
+        }
+
         .charts-container {
             margin-top: 20px;
             padding: 15px;
-            background: #f8f9fa;
+            background: #0f172a;
             border-radius: 8px;
-            border: 1px solid #e0e0e0;
+            border: 2px solid #374151;
         }
 
         .charts-grid {
@@ -824,10 +773,10 @@ def create_html_template():
         }
 
         .chart-section {
-            background: white;
+            background: #0f172a;
             padding: 15px;
             border-radius: 8px;
-            border: 1px solid #e0e0e0;
+            border: 2px solid #374151;
         }
 
         .chart-title {
@@ -836,15 +785,17 @@ def create_html_template():
             padding: 8px 12px;
             border-radius: 5px;
             text-align: center;
-            color: white;
+            color: #9ca3af;
+            border-left: 4px solid;
+            background: transparent;
         }
 
         .chart-title.voltage {
-            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            border-left-color: #ef4444;
         }
 
         .chart-title.current {
-            background: linear-gradient(135deg, #3498db, #2980b9);
+            border-left-color: #3b82f6;
         }
 
         .chart-canvas {
@@ -859,6 +810,7 @@ def create_html_template():
 
         .registers-container {
             padding: 20px;
+            background: #0f172a;
         }
 
         .readings-section {
@@ -868,32 +820,42 @@ def create_html_template():
         .section-title {
             font-size: 1.1em;
             font-weight: bold;
-            color: #2c3e50;
+            color: #9ca3af;
             margin-bottom: 15px;
             padding: 8px 12px;
             border-radius: 5px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            border-left: 4px solid;
+            background: transparent;
         }
 
         .voltage-section .section-title {
-            background: linear-gradient(135deg, #e74c3c, #c0392b);
-            color: white;
+            border-left-color: #ef4444;
         }
 
         .current-section .section-title {
-            background: linear-gradient(135deg, #3498db, #2980b9);
-            color: white;
+            border-left-color: #3b82f6;
         }
 
         .energy-section .section-title {
-            background: linear-gradient(135deg, #27ae60, #229954);
-            color: white;
+            border-left-color: #10b981;
         }
 
         .other-section .section-title {
-            background: linear-gradient(135deg, #9b59b6, #8e44ad);
-            color: white;
+            border-left-color: #a855f7;
+        }
+
+        .power_factors-section .section-title {
+            border-left-color: #a855f7;
+        }
+
+        .voltages-section .section-title {
+            border-left-color: #ef4444;
+        }
+
+        .currents-section .section-title {
+            border-left-color: #3b82f6;
         }
 
         .registers-grid {
@@ -903,31 +865,35 @@ def create_html_template():
             overflow-x: auto;
         }
 
-        .registers-grid.voltage-grid, .registers-grid.current-grid {
+        .registers-grid.voltage-grid, 
+        .registers-grid.current-grid,
+        .registers-grid.power_factor-grid {
             gap: 6px;
         }
 
         .register-badge {
-            background: white;
-            border: 2px solid #e0e0e0;
+            background: #1f2937;
+            border: 2px solid #4b5563;
             padding: 10px;
             border-radius: 8px;
             text-align: center;
             transition: all 0.3s ease;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
         }
 
-        .register-badge.voltage, .register-badge.current {
+        .register-badge.voltage, 
+        .register-badge.current,
+        .register-badge.power_factor {
             padding: 5px;
         }
 
         .register-name {
             font-weight: 600;
-            color: #2c3e50;
+            color: #9ca3af;
             margin-bottom: 6px;
             font-size: 0.7em;
             line-height: 1.1;
@@ -954,10 +920,12 @@ def create_html_template():
         .register-value {
             font-size: 1.4em;
             font-weight: bold;
+            color: #e5e7eb;
         }
 
         .register-unit {
             font-size: 0.8em;
+            color: #9ca3af;
         }
 
         .register-badge.voltage .register-value, .register-badge.current .register-value {
@@ -966,23 +934,23 @@ def create_html_template():
 
 
         .register-badge.voltage {
-            border-color: #e74c3c;
-            background: linear-gradient(135deg, #fff5f5, #ffeaea);
+            border-color: #ef4444;
+            background: #1f2937;
         }
 
         .register-badge.current {
-            border-color: #3498db;
-            background: linear-gradient(135deg, #f0f8ff, #e6f3ff);
+            border-color: #3b82f6;
+            background: #1f2937;
         }
 
         .register-badge.energy {
-            border-color: #27ae60;
-            background: linear-gradient(135deg, #f0fff4, #e6ffed);
+            border-color: #10b981;
+            background: #1f2937;
         }
 
         .register-badge.other {
-            border-color: #9b59b6;
-            background: linear-gradient(135deg, #faf5ff, #f3e8ff);
+            border-color: #a855f7;
+            background: #1f2937;
         }
 
         /* Dynamic badge color for new categories (fallback: HSL by category name hash) */
@@ -991,16 +959,16 @@ def create_html_template():
         }
         /* Example for a few possible new categories */
         .register-badge.frequency {
-            border-color: #f39c12;
-            background: linear-gradient(135deg, #fffbe6, #fff3cd);
+            border-color: #f59e0b;
+            background: #1f2937;
         }
         .register-badge.temperature {
-            border-color: #16a085;
-            background: linear-gradient(135deg, #e6fffa, #e0f7fa);
+            border-color: #14b8a6;
+            background: #1f2937;
         }
         .register-badge.power_factor {
-            border-color: #8e44ad;
-            background: linear-gradient(135deg, #f5e6ff, #f3e8ff);
+            border-color: #a855f7;
+            background: #1f2937;
         }
         /* Generic fallback for any unknown category: use HSL based on category name hash */
         .register-badge[data-category] {
@@ -1008,8 +976,15 @@ def create_html_template():
         }
 
         .register-badge.error {
-            border-color: #e74c3c;
-            background: #fdf2f2;
+            border-color: #ef4444;
+            background: #1f2937;
+            color: #ef4444;
+        }
+
+        .register-badge.error .register-name,
+        .register-badge.error .register-value,
+        .register-badge.error .register-unit {
+            color: #ef4444;
         }
 
         .voltage-current-row {
@@ -1019,6 +994,15 @@ def create_html_template():
             margin-bottom: 25px;
         }
 
+        .readings-section.voltages-section,
+        .readings-section.currents-section,
+        .readings-section.power_factors-section {
+            flex: 1 1 0;
+            min-width: 0;
+            margin-bottom: 0;
+        }
+
+        /* Legacy support for old category names */
         .readings-section.voltage-section,
         .readings-section.current-section {
             flex: 1 1 0;
@@ -1094,25 +1078,51 @@ def create_html_template():
         .no-data {
             text-align: center;
             padding: 50px;
-            color: #7f8c8d;
+            color: #9ca3af;
         }
 
         .error-message {
-            background: #f8d7da;
-            color: #721c24;
+            background: #0f172a;
+            color: #ef4444;
             padding: 15px;
             border-radius: 5px;
             margin: 20px 0;
-            border: 1px solid #f5c6cb;
+            border: 2px solid #ef4444;
         }
 
         .success-message {
-            background: #d4edda;
-            color: #155724;
+            background: #0f172a;
+            color: #10b981;
             padding: 15px;
             border-radius: 5px;
             margin: 20px 0;
-            border: 1px solid #c3e6cb;
+            border: 2px solid #10b981;
+        }
+
+        .utility-status {
+            font-size: 0.85em;
+            font-weight: bold;
+            padding: 4px 8px;
+            border-radius: 4px;
+            margin-top: 5px;
+            display: inline-block;
+            border: 2px solid;
+            background: #0f172a;
+        }
+
+        .utility-status.status-ok {
+            border-color: #10b981;
+            color: #10b981;
+        }
+
+        .utility-status.status-partial {
+            border-color: #f59e0b;
+            color: #f59e0b;
+        }
+
+        .utility-status.status-error {
+            border-color: #ef4444;
+            color: #ef4444;
         }
     </style>
 </head>
@@ -1522,6 +1532,73 @@ def create_html_template():
             updateMonitoringCount();
         }
 
+        function calculatePowerBadge(utilityData) {
+            // Calculate instantaneous 3-phase power: P = √3 × V × I × PF
+            // P (kW) = √3 × V_avg × I_avg × PF_avg / 1000
+            
+            if (!utilityData.registers || Object.keys(utilityData.registers).length === 0) {
+                return `
+                    <div class="power-badge no-data">
+                        <span class="power-label">⚡ Power</span>
+                        <span class="power-value">N/A</span>
+                    </div>
+                `;
+            }
+            
+            // Extract voltage, current, and power factor values
+            let voltages = [];
+            let currents = [];
+            let powerFactors = [];
+            
+            for (const [regKey, regData] of Object.entries(utilityData.registers)) {
+                if (regData.status === 'OK' && typeof regData.value === 'number') {
+                    if (regData.category === 'voltages') {
+                        voltages.push(regData.value);
+                    } else if (regData.category === 'currents') {
+                        currents.push(regData.value);
+                    } else if (regData.category === 'power_factors') {
+                        powerFactors.push(regData.value);
+                    }
+                }
+            }
+            
+            // Need at least one voltage and one current to calculate power
+            if (voltages.length === 0 || currents.length === 0) {
+                return `
+                    <div class="power-badge no-data">
+                        <span class="power-label">⚡ Power</span>
+                        <span class="power-value">N/A</span>
+                    </div>
+                `;
+            }
+            
+            // Calculate averages
+            const avgVoltage = voltages.reduce((a, b) => a + b, 0) / voltages.length;
+            const avgCurrent = currents.reduce((a, b) => a + b, 0) / currents.length;
+            const avgPF = powerFactors.length > 0 
+                ? powerFactors.reduce((a, b) => a + b, 0) / powerFactors.length 
+                : 0.85; // Default power factor if not available
+            
+            // Calculate 3-phase power in kW
+            // P = √3 × V × I × PF / 1000
+            const power = Math.sqrt(3) * avgVoltage * avgCurrent * avgPF / 1000;
+            
+            // Determine badge class based on power level
+            let badgeClass = 'power-badge';
+            if (power > 50) {
+                badgeClass += ' high-power';
+            } else if (power < 10) {
+                badgeClass += ' low-power';
+            }
+            
+            return `
+                <div class="${badgeClass}" title="Calculated from V×I×PF (3-phase)">
+                    <span class="power-label">⚡ Instantaneous Power</span>
+                    <span class="power-value">${power.toFixed(2)} kW</span>
+                </div>
+            `;
+        }
+
         function createUtilityCard(utilityId, utilityData) {
             const statusClass = getStatusClass(utilityData.status);
             const isMonitoring = monitoringIntervals.hasOwnProperty(utilityId);
@@ -1536,47 +1613,81 @@ def create_html_template():
                         categories[cat].push({key: regKey, data: regData});
                     }
                 }
-                // Sort categories: voltage, current, energy, then others alphabetically
-                const mainOrder = ['voltage', 'current', 'energy'];
+                // Group categories: voltages/currents/power_factors on same row, then others
+                const firstRowCats = ['voltages', 'currents', 'power_factors'];
                 const allCats = Object.keys(categories);
                 const sortedCats = [
-                    ...mainOrder.filter(c => allCats.includes(c)),
-                    ...allCats.filter(c => !mainOrder.includes(c)).sort()
+                    ...firstRowCats.filter(c => allCats.includes(c)),
+                    ...allCats.filter(c => !firstRowCats.includes(c)).sort()
                 ];
-                // Responsive row: try to fit as many as possible on one row, wrap if needed
+                // Responsive row: voltages, currents, power_factors on first row, others on separate rows
                 registersHtml = '<div class="registers-container">';
-                registersHtml += '<div class="voltage-current-row">';
-                let rowCount = 0;
-                let rowOpen = false;
-                let maxPerRow = 3; // Adjust for layout, can be made dynamic
-                sortedCats.forEach((cat, idx) => {
-                    // Section title and icon
-                    let icon = '';
-                    if (cat === 'voltage') icon = '⚡';
-                    else if (cat === 'current') icon = '🔌';
-                    else if (cat === 'energy') icon = '🔋';
-                    else icon = '📊';
-                    // Section CSS class
-                    let sectionClass = `${cat}-section`;
-                    // Grid class
-                    let gridClass = (cat === 'voltage' || cat === 'current') ? `${cat}-grid` : '';
-                    // Badge color class is the category name
-                    registersHtml += `
-                        <div class="readings-section ${sectionClass}">
-                            <div class="section-title">${icon} ${cat.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} Readings</div>
-                            <div class="registers-grid ${gridClass}">
-                    `;
-                    for (const reg of categories[cat]) {
-                        registersHtml += createRegisterBadge(reg.data, cat);
-                    }
-                    registersHtml += '</div></div>';
-                    rowCount++;
-                    // If more than maxPerRow, close row and start new
-                    if ((rowCount % maxPerRow === 0) && (idx < sortedCats.length - 1)) {
-                        registersHtml += '</div><div class="voltage-current-row">';
-                    }
-                });
-                registersHtml += '</div>';
+                
+                // First row: voltages, currents, power_factors
+                const firstRowCategories = sortedCats.filter(c => firstRowCats.includes(c));
+                if (firstRowCategories.length > 0) {
+                    registersHtml += '<div class="voltage-current-row">';
+                    firstRowCategories.forEach((cat) => {
+                        // Section title and icon
+                        let icon = '';
+                        if (cat === 'voltages') icon = '⚡';
+                        else if (cat === 'currents') icon = '🔌';
+                        else if (cat === 'power_factors') icon = '📊';
+                        else icon = '📊';
+                        // Section CSS class
+                        let sectionClass = `${cat}-section`;
+                        // Grid class
+                        let gridClass = (cat === 'voltages' || cat === 'currents') ? `${cat.replace('s', '')}-grid` : '';
+                        // Badge color class is the category name
+                        registersHtml += `
+                            <div class="readings-section ${sectionClass}">
+                                <div class="section-title">${icon} ${cat.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} Readings</div>
+                                <div class="registers-grid ${gridClass}">
+                        `;
+                        for (const reg of categories[cat]) {
+                            registersHtml += createRegisterBadge(reg.data, cat.replace('s', ''));
+                        }
+                        registersHtml += '</div></div>';
+                    });
+                    registersHtml += '</div>';
+                }
+                
+                // Other categories on separate rows
+                const otherCategories = sortedCats.filter(c => !firstRowCats.includes(c));
+                if (otherCategories.length > 0) {
+                    let maxPerRow = 3;
+                    let rowCount = 0;
+                    registersHtml += '<div class="voltage-current-row">';
+                    otherCategories.forEach((cat, idx) => {
+                        // Section title and icon
+                        let icon = '';
+                        if (cat === 'voltage') icon = '⚡';
+                        else if (cat === 'current') icon = '🔌';
+                        else if (cat === 'energy') icon = '🔋';
+                        else icon = '📊';
+                        // Section CSS class
+                        let sectionClass = `${cat}-section`;
+                        // Grid class
+                        let gridClass = (cat === 'voltage' || cat === 'current') ? `${cat}-grid` : '';
+                        // Badge color class is the category name
+                        registersHtml += `
+                            <div class="readings-section ${sectionClass}">
+                                <div class="section-title">${icon} ${cat.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} Readings</div>
+                                <div class="registers-grid ${gridClass}">
+                        `;
+                        for (const reg of categories[cat]) {
+                            registersHtml += createRegisterBadge(reg.data, cat);
+                        }
+                        registersHtml += '</div></div>';
+                        rowCount++;
+                        // If more than maxPerRow, close row and start new
+                        if ((rowCount % maxPerRow === 0) && (idx < otherCategories.length - 1)) {
+                            registersHtml += '</div><div class="voltage-current-row">';
+                        }
+                    });
+                    registersHtml += '</div>';
+                }
+                
                 registersHtml += '</div>';
                 // Add charts section if monitoring is active
                 if (isMonitoring) {
@@ -1620,6 +1731,9 @@ def create_html_template():
                                 ${utilityData.timestamp || ''}
                             </div>
                             ${isMonitoring ? '<div class="monitor-status">🔴 Live Monitoring Active (2s)</div>' : ''}
+                            <div id="power-badge-${utilityId}">
+                                ${calculatePowerBadge(utilityData)}
+                            </div>
                         </div>
                         <div class="utility-header-actions">
                             <button class="refresh-btn" onclick="refreshUtility('${utilityId}', this)">
@@ -1797,6 +1911,12 @@ def create_html_template():
                             const timestampElement = utilityCard.querySelector('.timestamp');
                             if (timestampElement) {
                                 timestampElement.textContent = data.utility_data.timestamp || '';
+                            }
+                            
+                            // Update power badge during monitoring
+                            const powerBadgeContainer = document.getElementById(`power-badge-${utilityId}`);
+                            if (powerBadgeContainer) {
+                                powerBadgeContainer.innerHTML = calculatePowerBadge(data.utility_data);
                             }
 
                             // Ensure charts are still present and functioning
@@ -2042,4 +2162,31 @@ def create_html_template():
     print("HTML template created: templates/energy_dashboard.html")
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True, threaded=True)
+    # Avvia il server Flask sulla porta 5050
+    app.run(host='0.0.0.0', port=5050, debug=True)
+    print("Energy Meter Web Server - Excel Configuration Based")
+    print("=" * 60)
+    print()
+    
+    # Create HTML template
+    create_html_template()
+    
+    # Perform initial reading in background thread (one time only)
+    print("Performing initial reading of all utilities (startup only)...")
+    bg_thread = threading.Thread(target=background_reading_thread, daemon=True)
+    bg_thread.start()
+    
+    # Wait for initial reading to complete
+    bg_thread.join(timeout=10)  # Wait max 10 seconds for initial reading
+    
+    print(f"\nStarting web server on http://localhost:5000")
+    print(f"Configuration: {len(utilities_config)} utilities, {len(registers_config)} registers")
+    print("📋 Use 'Refresh All' or individual 'Refresh' buttons to update readings")
+    print("🔴 Use 'Monitor' buttons for real-time monitoring (2s intervals)")
+    print("Press Ctrl+C to stop the server")
+    print()
+    
+    try:
+        app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
+    except KeyboardInterrupt:
+        print("\nServer stopped by user")
