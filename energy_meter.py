@@ -903,7 +903,9 @@ def create_html_template():
             justify-content: center;
         }
 
-        .register-badge.voltage .register-name, .register-badge.current .register-name {
+        .register-badge.voltage .register-name, 
+        .register-badge.current .register-name,
+        .register-badge.power_factor .register-name {
             font-size: 0.65em;
             min-height: 24px;
             margin-bottom: 4px;
@@ -928,7 +930,9 @@ def create_html_template():
             color: #9ca3af;
         }
 
-        .register-badge.voltage .register-value, .register-badge.current .register-value {
+        .register-badge.voltage .register-value, 
+        .register-badge.current .register-value,
+        .register-badge.power_factor .register-value {
             font-size: 1.1em;
         }
 
