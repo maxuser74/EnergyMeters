@@ -23,17 +23,19 @@
         .container {
             max-width: 1400px;
             margin: 0 auto;
-            background: #111827;
+            background: #0f172a;
             border-radius: 15px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.4);
             overflow: hidden;
+            border: 2px solid #1f2937;
         }
 
         .header {
-            background: linear-gradient(135deg, #0b1220 0%, #1f2937 100%);
+            background: #0f172a;
             color: #f3f4f6;
             padding: 20px 30px;
             text-align: center;
+            border-bottom: 2px solid #1f2937;
         }
 
         .header h1 {
@@ -42,9 +44,9 @@
         }
 
         .status-bar {
-            background: #1f2937;
+            background: #0f172a;
             padding: 15px 30px;
-            border-bottom: 1px solid #374151;
+            border-bottom: 2px solid #1f2937;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -92,27 +94,28 @@
 
         .utilities-grid {
             padding: 30px;
-            background: #111827;
+            background: #0f172a;
         }
 
         .utility-card {
-            background: #1f2937;
-            border: 1px solid #374151;
+            background: #0f172a;
+            border: 2px solid #374151;
             border-radius: 10px;
             margin-bottom: 20px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-            transition: transform 0.3s, box-shadow 0.3s;
+            transition: transform 0.3s, box-shadow 0.3s, border-color 0.3s;
         }
 
         .utility-card:hover {
             transform: translateY(-2px);
             box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+            border-color: #4b5563;
         }
 
         .utility-header {
-            background: #111827;
+            background: #0f172a;
             padding: 20px;
-            border-bottom: 1px solid #374151;
+            border-bottom: 2px solid #374151;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -127,6 +130,12 @@
         .utility-details {
             color: #9ca3af;
             font-size: 0.9em;
+        }
+
+        .timestamp {
+            color: #6b7280;
+            font-size: 0.8em;
+            margin-top: 5px;
         }
 
         .refresh-btn {
@@ -247,9 +256,9 @@
         .charts-container {
             margin-top: 20px;
             padding: 15px;
-            background: #f8f9fa;
+            background: #0f172a;
             border-radius: 8px;
-            border: 1px solid #e0e0e0;
+            border: 2px solid #374151;
         }
 
         .charts-grid {
@@ -260,10 +269,10 @@
         }
 
         .chart-section {
-            background: white;
+            background: #0f172a;
             padding: 15px;
             border-radius: 8px;
-            border: 1px solid #e0e0e0;
+            border: 2px solid #374151;
         }
 
         .chart-title {
@@ -272,15 +281,17 @@
             padding: 8px 12px;
             border-radius: 5px;
             text-align: center;
-            color: white;
+            color: #9ca3af;
+            border-left: 4px solid;
+            background: transparent;
         }
 
         .chart-title.voltage {
-            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            border-left-color: #ef4444;
         }
 
         .chart-title.current {
-            background: linear-gradient(135deg, #3498db, #2980b9);
+            border-left-color: #3b82f6;
         }
 
         .chart-canvas {
@@ -295,7 +306,7 @@
 
         .registers-container {
             padding: 20px;
-            background: #1f2937;
+            background: #0f172a;
         }
 
         .readings-section {
@@ -305,32 +316,42 @@
         .section-title {
             font-size: 1.1em;
             font-weight: bold;
-            color: #f3f4f6;
+            color: #9ca3af;
             margin-bottom: 15px;
             padding: 8px 12px;
             border-radius: 5px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            border-left: 4px solid;
+            background: transparent;
         }
 
         .voltage-section .section-title {
-            background: linear-gradient(135deg, #e74c3c, #c0392b);
-            color: white;
+            border-left-color: #ef4444;
         }
 
         .current-section .section-title {
-            background: linear-gradient(135deg, #3498db, #2980b9);
-            color: white;
+            border-left-color: #3b82f6;
         }
 
         .energy-section .section-title {
-            background: linear-gradient(135deg, #27ae60, #229954);
-            color: white;
+            border-left-color: #10b981;
         }
 
         .other-section .section-title {
-            background: linear-gradient(135deg, #9b59b6, #8e44ad);
-            color: white;
+            border-left-color: #a855f7;
+        }
+
+        .power_factors-section .section-title {
+            border-left-color: #a855f7;
+        }
+
+        .voltages-section .section-title {
+            border-left-color: #ef4444;
+        }
+
+        .currents-section .section-title {
+            border-left-color: #3b82f6;
         }
 
         .registers-grid {
@@ -340,31 +361,35 @@
             overflow-x: auto;
         }
 
-        .registers-grid.voltage-grid, .registers-grid.current-grid {
+        .registers-grid.voltage-grid, 
+        .registers-grid.current-grid,
+        .registers-grid.power_factor-grid {
             gap: 6px;
         }
 
         .register-badge {
-            background: white;
-            border: 2px solid #e0e0e0;
+            background: #1f2937;
+            border: 2px solid #4b5563;
             padding: 10px;
             border-radius: 8px;
             text-align: center;
             transition: all 0.3s ease;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
         }
 
-        .register-badge.voltage, .register-badge.current {
+        .register-badge.voltage, 
+        .register-badge.current,
+        .register-badge.power_factor {
             padding: 5px;
         }
 
         .register-name {
             font-weight: 600;
-            color: #2c3e50;
+            color: #9ca3af;
             margin-bottom: 6px;
             font-size: 0.7em;
             line-height: 1.1;
@@ -374,7 +399,9 @@
             justify-content: center;
         }
 
-        .register-badge.voltage .register-name, .register-badge.current .register-name {
+        .register-badge.voltage .register-name, 
+        .register-badge.current .register-name,
+        .register-badge.power_factor .register-name {
             font-size: 0.65em;
             min-height: 24px;
             margin-bottom: 4px;
@@ -391,35 +418,39 @@
         .register-value {
             font-size: 1.4em;
             font-weight: bold;
+            color: #e5e7eb;
         }
 
         .register-unit {
             font-size: 0.8em;
+            color: #9ca3af;
         }
 
-        .register-badge.voltage .register-value, .register-badge.current .register-value {
+        .register-badge.voltage .register-value, 
+        .register-badge.current .register-value,
+        .register-badge.power_factor .register-value {
             font-size: 1.1em;
         }
 
 
         .register-badge.voltage {
-            border-color: #e74c3c;
-            background: linear-gradient(135deg, #fff5f5, #ffeaea);
+            border-color: #ef4444;
+            background: #1f2937;
         }
 
         .register-badge.current {
-            border-color: #3498db;
-            background: linear-gradient(135deg, #f0f8ff, #e6f3ff);
+            border-color: #3b82f6;
+            background: #1f2937;
         }
 
         .register-badge.energy {
-            border-color: #27ae60;
-            background: linear-gradient(135deg, #f0fff4, #e6ffed);
+            border-color: #10b981;
+            background: #1f2937;
         }
 
         .register-badge.other {
-            border-color: #9b59b6;
-            background: linear-gradient(135deg, #faf5ff, #f3e8ff);
+            border-color: #a855f7;
+            background: #1f2937;
         }
 
         /* Dynamic badge color for new categories (fallback: HSL by category name hash) */
@@ -428,16 +459,16 @@
         }
         /* Example for a few possible new categories */
         .register-badge.frequency {
-            border-color: #f39c12;
-            background: linear-gradient(135deg, #fffbe6, #fff3cd);
+            border-color: #f59e0b;
+            background: #1f2937;
         }
         .register-badge.temperature {
-            border-color: #16a085;
-            background: linear-gradient(135deg, #e6fffa, #e0f7fa);
+            border-color: #14b8a6;
+            background: #1f2937;
         }
         .register-badge.power_factor {
-            border-color: #8e44ad;
-            background: linear-gradient(135deg, #f5e6ff, #f3e8ff);
+            border-color: #a855f7;
+            background: #1f2937;
         }
         /* Generic fallback for any unknown category: use HSL based on category name hash */
         .register-badge[data-category] {
@@ -445,8 +476,15 @@
         }
 
         .register-badge.error {
-            border-color: #e74c3c;
-            background: #fdf2f2;
+            border-color: #ef4444;
+            background: #1f2937;
+            color: #ef4444;
+        }
+
+        .register-badge.error .register-name,
+        .register-badge.error .register-value,
+        .register-badge.error .register-unit {
+            color: #ef4444;
         }
 
         .voltage-current-row {
@@ -456,6 +494,15 @@
             margin-bottom: 25px;
         }
 
+        .readings-section.voltages-section,
+        .readings-section.currents-section,
+        .readings-section.power_factors-section {
+            flex: 1 1 0;
+            min-width: 0;
+            margin-bottom: 0;
+        }
+
+        /* Legacy support for old category names */
         .readings-section.voltage-section,
         .readings-section.current-section {
             flex: 1 1 0;
@@ -531,25 +578,51 @@
         .no-data {
             text-align: center;
             padding: 50px;
-            color: #7f8c8d;
+            color: #9ca3af;
         }
 
         .error-message {
-            background: #f8d7da;
-            color: #721c24;
+            background: #0f172a;
+            color: #ef4444;
             padding: 15px;
             border-radius: 5px;
             margin: 20px 0;
-            border: 1px solid #f5c6cb;
+            border: 2px solid #ef4444;
         }
 
         .success-message {
-            background: #d4edda;
-            color: #155724;
+            background: #0f172a;
+            color: #10b981;
             padding: 15px;
             border-radius: 5px;
             margin: 20px 0;
-            border: 1px solid #c3e6cb;
+            border: 2px solid #10b981;
+        }
+
+        .utility-status {
+            font-size: 0.85em;
+            font-weight: bold;
+            padding: 4px 8px;
+            border-radius: 4px;
+            margin-top: 5px;
+            display: inline-block;
+            border: 2px solid;
+            background: #0f172a;
+        }
+
+        .utility-status.status-ok {
+            border-color: #10b981;
+            color: #10b981;
+        }
+
+        .utility-status.status-partial {
+            border-color: #f59e0b;
+            color: #f59e0b;
+        }
+
+        .utility-status.status-error {
+            border-color: #ef4444;
+            color: #ef4444;
         }
     </style>
 </head>
@@ -1040,47 +1113,81 @@
                         categories[cat].push({key: regKey, data: regData});
                     }
                 }
-                // Sort categories: voltage, current, energy, then others alphabetically
-                const mainOrder = ['voltage', 'current', 'energy'];
+                // Group categories: voltages/currents/power_factors on same row, then others
+                const firstRowCats = ['voltages', 'currents', 'power_factors'];
                 const allCats = Object.keys(categories);
                 const sortedCats = [
-                    ...mainOrder.filter(c => allCats.includes(c)),
-                    ...allCats.filter(c => !mainOrder.includes(c)).sort()
+                    ...firstRowCats.filter(c => allCats.includes(c)),
+                    ...allCats.filter(c => !firstRowCats.includes(c)).sort()
                 ];
-                // Responsive row: try to fit as many as possible on one row, wrap if needed
+                // Responsive row: voltages, currents, power_factors on first row, others on separate rows
                 registersHtml = '<div class="registers-container">';
-                registersHtml += '<div class="voltage-current-row">';
-                let rowCount = 0;
-                let rowOpen = false;
-                let maxPerRow = 3; // Adjust for layout, can be made dynamic
-                sortedCats.forEach((cat, idx) => {
-                    // Section title and icon
-                    let icon = '';
-                    if (cat === 'voltage') icon = '⚡';
-                    else if (cat === 'current') icon = '🔌';
-                    else if (cat === 'energy') icon = '🔋';
-                    else icon = '📊';
-                    // Section CSS class
-                    let sectionClass = `${cat}-section`;
-                    // Grid class
-                    let gridClass = (cat === 'voltage' || cat === 'current') ? `${cat}-grid` : '';
-                    // Badge color class is the category name
-                    registersHtml += `
-                        <div class="readings-section ${sectionClass}">
-                            <div class="section-title">${icon} ${cat.replace(/_/g, ' ').replace(/\w/g, l => l.toUpperCase())} Readings</div>
-                            <div class="registers-grid ${gridClass}">
-                    `;
-                    for (const reg of categories[cat]) {
-                        registersHtml += createRegisterBadge(reg.data, cat);
-                    }
-                    registersHtml += '</div></div>';
-                    rowCount++;
-                    // If more than maxPerRow, close row and start new
-                    if ((rowCount % maxPerRow === 0) && (idx < sortedCats.length - 1)) {
-                        registersHtml += '</div><div class="voltage-current-row">';
-                    }
-                });
-                registersHtml += '</div>';
+                
+                // First row: voltages, currents, power_factors
+                const firstRowCategories = sortedCats.filter(c => firstRowCats.includes(c));
+                if (firstRowCategories.length > 0) {
+                    registersHtml += '<div class="voltage-current-row">';
+                    firstRowCategories.forEach((cat) => {
+                        // Section title and icon
+                        let icon = '';
+                        if (cat === 'voltages') icon = '⚡';
+                        else if (cat === 'currents') icon = '🔌';
+                        else if (cat === 'power_factors') icon = '📊';
+                        else icon = '📊';
+                        // Section CSS class
+                        let sectionClass = `${cat}-section`;
+                        // Grid class
+                        let gridClass = (cat === 'voltages' || cat === 'currents') ? `${cat.replace('s', '')}-grid` : '';
+                        // Badge color class is the category name
+                        registersHtml += `
+                            <div class="readings-section ${sectionClass}">
+                                <div class="section-title">${icon} ${cat.replace(/_/g, ' ').replace(/\w/g, l => l.toUpperCase())} Readings</div>
+                                <div class="registers-grid ${gridClass}">
+                        `;
+                        for (const reg of categories[cat]) {
+                            registersHtml += createRegisterBadge(reg.data, cat.replace('s', ''));
+                        }
+                        registersHtml += '</div></div>';
+                    });
+                    registersHtml += '</div>';
+                }
+                
+                // Other categories on separate rows
+                const otherCategories = sortedCats.filter(c => !firstRowCats.includes(c));
+                if (otherCategories.length > 0) {
+                    let maxPerRow = 3;
+                    let rowCount = 0;
+                    registersHtml += '<div class="voltage-current-row">';
+                    otherCategories.forEach((cat, idx) => {
+                        // Section title and icon
+                        let icon = '';
+                        if (cat === 'voltage') icon = '⚡';
+                        else if (cat === 'current') icon = '🔌';
+                        else if (cat === 'energy') icon = '🔋';
+                        else icon = '📊';
+                        // Section CSS class
+                        let sectionClass = `${cat}-section`;
+                        // Grid class
+                        let gridClass = (cat === 'voltage' || cat === 'current') ? `${cat}-grid` : '';
+                        // Badge color class is the category name
+                        registersHtml += `
+                            <div class="readings-section ${sectionClass}">
+                                <div class="section-title">${icon} ${cat.replace(/_/g, ' ').replace(/\w/g, l => l.toUpperCase())} Readings</div>
+                                <div class="registers-grid ${gridClass}">
+                        `;
+                        for (const reg of categories[cat]) {
+                            registersHtml += createRegisterBadge(reg.data, cat);
+                        }
+                        registersHtml += '</div></div>';
+                        rowCount++;
+                        // If more than maxPerRow, close row and start new
+                        if ((rowCount % maxPerRow === 0) && (idx < otherCategories.length - 1)) {
+                            registersHtml += '</div><div class="voltage-current-row">';
+                        }
+                    });
+                    registersHtml += '</div>';
+                }
+                
                 registersHtml += '</div>';
                 // Add charts section if monitoring is active
                 if (isMonitoring) {
