@@ -767,7 +767,7 @@ def create_html_template():
 
         .charts-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
             gap: 20px;
             margin-top: 15px;
         }
@@ -798,6 +798,10 @@ def create_html_template():
             border-left-color: #3b82f6;
         }
 
+        .chart-title.power {
+            border-left-color: #f97316;
+        }
+
         .chart-title.powerfactor {
             border-left-color: #a855f7;
         }
@@ -809,12 +813,6 @@ def create_html_template():
         @media (max-width: 768px) {
             .charts-grid {
                 grid-template-columns: 1fr;
-            }
-        }
-
-        @media (min-width: 769px) and (max-width: 1200px) {
-            .charts-grid {
-                grid-template-columns: 1fr 1fr;
             }
         }
 
@@ -1185,19 +1183,74 @@ def create_html_template():
             voltage: {
                 backgroundColor: 'rgba(231, 76, 60, 0.1)',
                 borderColor: 'rgba(231, 76, 60, 1)',
-                pointBackgroundColor: 'rgba(231, 76, 60, 1)'
+                pointBackgroundColor: 'rgba(231, 76, 60, 1)',
+                tension: 0.45,
+                cubicInterpolationMode: 'monotone',
+                pointRadius: 0,
+                fill: false
             },
             current: {
                 backgroundColor: 'rgba(52, 152, 219, 0.1)',
                 borderColor: 'rgba(52, 152, 219, 1)',
-                pointBackgroundColor: 'rgba(52, 152, 219, 1)'
+                pointBackgroundColor: 'rgba(52, 152, 219, 1)',
+                tension: 0.45,
+                cubicInterpolationMode: 'monotone',
+                pointRadius: 0,
+                fill: false
+            },
+            power: {
+                backgroundColor: 'rgba(249, 115, 22, 0.1)',
+                borderColor: 'rgba(249, 115, 22, 1)',
+                pointBackgroundColor: 'rgba(249, 115, 22, 1)',
+                tension: 0.45,
+                cubicInterpolationMode: 'monotone',
+                pointRadius: 0,
+                fill: false
             },
             powerFactor: {
                 backgroundColor: 'rgba(168, 85, 247, 0.1)',
                 borderColor: 'rgba(168, 85, 247, 1)',
-                pointBackgroundColor: 'rgba(168, 85, 247, 1)'
+                pointBackgroundColor: 'rgba(168, 85, 247, 1)',
+                tension: 0.45,
+                cubicInterpolationMode: 'monotone',
+                pointRadius: 0,
+                fill: false
             }
         };
+
+        function escapeAttribute(value) {
+            if (value === null || value === undefined) return '';
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/"/g, '&quot;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+        }
+
+        function cleanLabel(label, category) {
+            if (!label) return label;
+            let cleaned = label.trim();
+            const cat = (category || '').toLowerCase();
+            const removalPatterns = {
+                voltages: [/\bvoltages?\b/gi],
+                voltage: [/\bvoltages?\b/gi],
+                currents: [/\bcurrents?\b/gi],
+                current: [/\bcurrents?\b/gi],
+                power: [/\bpower\b/gi],
+                power_factors: [/\bpower\s*factors?\b/gi],
+                power_factor: [/\bpower\s*factors?\b/gi]
+            };
+
+            const patterns = removalPatterns[cat];
+            if (patterns) {
+                patterns.forEach(pattern => {
+                    cleaned = cleaned.replace(pattern, ' ');
+                });
+            }
+
+            cleaned = cleaned.replace(/\s+/g, ' ').replace(/[-:;,]+$/g, '').trim();
+            return cleaned || label.trim();
+        }
 
         function initializeCharts(utilityId) {
             // Initialize chart data storage for this utility
@@ -1205,13 +1258,14 @@ def create_html_template():
                 chartData[utilityId] = {
                     voltage: { labels: [], datasets: [] },
                     current: { labels: [], datasets: [] },
+                    power: { labels: [], datasets: [] },
                     powerFactor: { labels: [], datasets: [] }
                 };
             }
 
             // Initialize chart instances
             if (!chartInstances[utilityId]) {
-                chartInstances[utilityId] = { voltage: null, current: null, powerFactor: null };
+                chartInstances[utilityId] = { voltage: null, current: null, power: null, powerFactor: null };
             }
 
             // Create voltage chart
@@ -1262,6 +1316,29 @@ def create_html_template():
                 }
             }
 
+            // Create power chart
+            const powerCanvas = document.getElementById(`power-chart-${utilityId}`);
+            if (powerCanvas) {
+                if (chartInstances[utilityId].power) {
+                    try {
+                        chartInstances[utilityId].power.destroy();
+                    } catch (e) {
+                        console.log(`Error destroying power chart for ${utilityId}:`, e);
+                    }
+                }
+
+                try {
+                    chartInstances[utilityId].power = new Chart(powerCanvas, {
+                        type: 'line',
+                        data: chartData[utilityId].power,
+                        options: getChartOptions('Power (kW)')
+                    });
+                    console.log(`Power chart initialized for ${utilityId}`);
+                } catch (e) {
+                    console.error(`Error creating power chart for ${utilityId}:`, e);
+                }
+            }
+
             // Create power factor chart
             const powerFactorCanvas = document.getElementById(`powerfactor-chart-${utilityId}`);
             if (powerFactorCanvas) {
@@ -1308,22 +1385,24 @@ def create_html_template():
                             text: 'Time'
                         }
                     },
-                    y: {
-                        display: true,
-                        title: {
-                            display: true,
-                            text: title
-                        }
-                    }
-                },
-                elements: {
-                    point: {
-                        radius: 2
-                    },
-                    line: {
-                        tension: 0.1
-                    }
-                }
+                  y: {
+                      display: true,
+                      title: {
+                          display: true,
+                          text: title
+                      }
+                  }
+              },
+              elements: {
+                  point: {
+                      radius: 1,
+                      hoverRadius: 3
+                  },
+                  line: {
+                      tension: 0.45,
+                      borderWidth: 2
+                  }
+              }
             };
         }
 
@@ -1331,6 +1410,7 @@ def create_html_template():
             if (chartData[utilityId]) {
                 chartData[utilityId].voltage = { labels: [], datasets: [] };
                 chartData[utilityId].current = { labels: [], datasets: [] };
+                chartData[utilityId].power = { labels: [], datasets: [] };
                 chartData[utilityId].powerFactor = { labels: [], datasets: [] };
             }
 
@@ -1342,6 +1422,10 @@ def create_html_template():
                 if (chartInstances[utilityId].current) {
                     chartInstances[utilityId].current.data = chartData[utilityId].current;
                     chartInstances[utilityId].current.update();
+                }
+                if (chartInstances[utilityId].power) {
+                    chartInstances[utilityId].power.data = chartData[utilityId].power;
+                    chartInstances[utilityId].power.update();
                 }
                 if (chartInstances[utilityId].powerFactor) {
                     chartInstances[utilityId].powerFactor.data = chartData[utilityId].powerFactor;
@@ -1362,12 +1446,13 @@ def create_html_template():
             const now = new Date().toLocaleTimeString();
             const maxDataPoints = 50; // Keep last 50 data points
 
-            // Prepare voltage, current and power factor data
+            // Prepare voltage, current, power and power factor data
             const voltageData = {};
             const currentData = {};
+            const powerData = {};
             const powerFactorData = {};
 
-            // Extract voltage, current and power factor values
+            // Extract voltage, current, power and power factor values
             for (const [regKey, regData] of Object.entries(utilityData.registers)) {
                 const description = regData.description.toLowerCase();
                 const unit = (regData.unit || '').toLowerCase();
@@ -1379,6 +1464,8 @@ def create_html_template():
                         voltageData[regData.description] = value;
                     } else if (category === 'currents' || description.includes('current') || description.includes('corrente') || unit === 'a') {
                         currentData[regData.description] = value;
+                    } else if (category === 'power' || (description.includes('power') && !description.includes('factor'))) {
+                        powerData[regData.description] = value;
                     } else if (category === 'power_factors' || description.includes('power factor') || description.includes('fattore di potenza') || description.includes('cos')) {
                         powerFactorData[regData.description] = value;
                     }
@@ -1396,15 +1483,17 @@ def create_html_template():
 
                 // Update datasets
                 Object.entries(voltageData).forEach(([description, value], index) => {
+                    const displayLabel = cleanLabel(description, 'voltages');
                     if (!chartData[utilityId].voltage.datasets[index]) {
                         chartData[utilityId].voltage.datasets[index] = {
-                            label: description,
+                            label: displayLabel,
                             data: [],
                             ...chartConfig.voltage,
                             borderColor: `hsl(${index * 30}, 70%, 50%)`,
                             backgroundColor: `hsla(${index * 30}, 70%, 50%, 0.1)`
                         };
                     }
+                    chartData[utilityId].voltage.datasets[index].label = displayLabel;
                     chartData[utilityId].voltage.datasets[index].data.push(value);
                 });
             }
@@ -1420,16 +1509,43 @@ def create_html_template():
 
                 // Update datasets
                 Object.entries(currentData).forEach(([description, value], index) => {
+                    const displayLabel = cleanLabel(description, 'currents');
                     if (!chartData[utilityId].current.datasets[index]) {
                         chartData[utilityId].current.datasets[index] = {
-                            label: description,
+                            label: displayLabel,
                             data: [],
                             ...chartConfig.current,
                             borderColor: `hsl(${200 + index * 30}, 70%, 50%)`,
                             backgroundColor: `hsla(${200 + index * 30}, 70%, 50%, 0.1)`
                         };
                     }
+                    chartData[utilityId].current.datasets[index].label = displayLabel;
                     chartData[utilityId].current.datasets[index].data.push(value);
+                });
+            }
+
+            // Update power chart data
+            if (Object.keys(powerData).length > 0) {
+                if (chartData[utilityId].power.labels.length >= maxDataPoints) {
+                    chartData[utilityId].power.labels.shift();
+                    chartData[utilityId].power.datasets.forEach(dataset => dataset.data.shift());
+                }
+
+                chartData[utilityId].power.labels.push(now);
+
+                Object.entries(powerData).forEach(([description, value], index) => {
+                    const displayLabel = cleanLabel(description, 'power');
+                    if (!chartData[utilityId].power.datasets[index]) {
+                        chartData[utilityId].power.datasets[index] = {
+                            label: displayLabel,
+                            data: [],
+                            ...chartConfig.power,
+                            borderColor: `hsl(${30 + index * 30}, 70%, 50%)`,
+                            backgroundColor: `hsla(${30 + index * 30}, 70%, 50%, 0.1)`
+                        };
+                    }
+                    chartData[utilityId].power.datasets[index].label = displayLabel;
+                    chartData[utilityId].power.datasets[index].data.push(value);
                 });
             }
 
@@ -1444,15 +1560,17 @@ def create_html_template():
 
                 // Update datasets
                 Object.entries(powerFactorData).forEach(([description, value], index) => {
+                    const displayLabel = cleanLabel(description, 'power_factors');
                     if (!chartData[utilityId].powerFactor.datasets[index]) {
                         chartData[utilityId].powerFactor.datasets[index] = {
-                            label: description,
+                            label: displayLabel,
                             data: [],
                             ...chartConfig.powerFactor,
                             borderColor: `hsl(${270 + index * 30}, 70%, 50%)`,
                             backgroundColor: `hsla(${270 + index * 30}, 70%, 50%, 0.1)`
                         };
                     }
+                    chartData[utilityId].powerFactor.datasets[index].label = displayLabel;
                     chartData[utilityId].powerFactor.datasets[index].data.push(value);
                 });
             }
@@ -1477,6 +1595,17 @@ def create_html_template():
             } catch (e) {
                 console.error(`Error updating current chart for ${utilityId}:`, e);
                 // Try to reinitialize the chart
+                setTimeout(() => {
+                    initializeCharts(utilityId);
+                }, 100);
+            }
+
+            try {
+                if (chartInstances[utilityId].power && chartInstances[utilityId].power.canvas) {
+                    chartInstances[utilityId].power.update('none');
+                }
+            } catch (e) {
+                console.error(`Error updating power chart for ${utilityId}:`, e);
                 setTimeout(() => {
                     initializeCharts(utilityId);
                 }, 100);
@@ -1701,7 +1830,7 @@ def create_html_template():
                     }
                 }
                 // Group categories: voltages/currents/power_factors on same row, then others
-                const firstRowCats = ['voltages', 'currents', 'power_factors'];
+                const firstRowCats = ['voltages', 'currents', 'power', 'power_factors'];
                 const allCats = Object.keys(categories);
                 const sortedCats = [
                     ...firstRowCats.filter(c => allCats.includes(c)),
@@ -1719,6 +1848,7 @@ def create_html_template():
                         let icon = '';
                         if (cat === 'voltages') icon = '⚡';
                         else if (cat === 'currents') icon = '🔌';
+                        else if (cat === 'power') icon = '⚡';
                         else if (cat === 'power_factors') icon = '📊';
                         else icon = '📊';
                         // Section CSS class
@@ -1797,6 +1927,12 @@ def create_html_template():
                                     </div>
                                 </div>
                                 <div class="chart-section">
+                                    <div class="chart-title power">⚡ Power</div>
+                                    <div class="chart-canvas">
+                                        <canvas id="power-chart-${utilityId}"></canvas>
+                                    </div>
+                                </div>
+                                <div class="chart-section">
                                     <div class="chart-title powerfactor">📊 Power Factor</div>
                                     <div class="chart-canvas">
                                         <canvas id="powerfactor-chart-${utilityId}"></canvas>
@@ -1848,19 +1984,24 @@ def create_html_template():
             const badgeClass = regData.status === 'OK' ? category : 'error';
             const valueClass = regData.status === 'OK' ? '' : 'error';
             // Add data-category for dynamic coloring
-            let dataAttr = '';
+            const attrParts = [];
             if (regData.status === 'OK' && !['voltage','current','energy','other'].includes(category)) {
-                dataAttr = `data-category="${category}"`;
+                attrParts.push(`data-category="${category}"`);
             }
             // Show the type/category in the badge for clarity
             let typeLabel = '';
             if (regData.category && regData.category !== category) {
                 typeLabel = `<div class='register-type'>${regData.category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</div>`;
             }
+            if (regData.description) {
+                attrParts.push(`data-description="${escapeAttribute(regData.description)}"`);
+            }
+            const attrString = attrParts.length ? ` ${attrParts.join(' ')}` : '';
+            const displayName = cleanLabel(regData.description || '', regData.category || category);
             return `
-                <div class="register-badge ${badgeClass}" ${dataAttr}>
+                <div class="register-badge ${badgeClass}"${attrString}>
                     ${typeLabel}
-                    <div class="register-name">${regData.description}</div>
+                    <div class="register-name">${displayName}</div>
                     <div class="register-measure">
                         <span class="register-value ${valueClass}">${regData.value}</span>
                         <span class="register-unit">${regData.unit || ''}</span>
@@ -1972,26 +2113,31 @@ def create_html_template():
                         
                         // Update register values in the existing card
                         const utilityCard = document.getElementById(`utility-${utilityId}`);
-                        if (utilityCard && data.utility_data.registers) {
-                            Object.entries(data.utility_data.registers).forEach(([regKey, regData]) => {
-                                // Update register badges
-                                const registerBadges = utilityCard.querySelectorAll('.register-badge');
-                                registerBadges.forEach(badge => {
-                                    const nameElement = badge.querySelector('.register-name');
-                                    if (nameElement && nameElement.textContent.trim() === regData.description) {
-                                        const valueElement = badge.querySelector('.register-value');
-                                        const unitElement = badge.querySelector('.register-unit');
-                                        
-                                        if (valueElement) {
-                                            valueElement.textContent = regData.value;
-                                            valueElement.className = regData.status === 'OK' ? 'register-value' : 'register-value error';
+                            if (utilityCard && data.utility_data.registers) {
+                                Object.entries(data.utility_data.registers).forEach(([regKey, regData]) => {
+                                    // Update register badges
+                                    const registerBadges = utilityCard.querySelectorAll('.register-badge');
+                                    registerBadges.forEach(badge => {
+                                        const originalDescription = badge.getAttribute('data-description');
+                                        if (originalDescription && originalDescription === regData.description) {
+                                            badge.setAttribute('data-description', regData.description || '');
+                                            const nameElement = badge.querySelector('.register-name');
+                                            const valueElement = badge.querySelector('.register-value');
+                                            const unitElement = badge.querySelector('.register-unit');
+                                            
+                                            if (nameElement) {
+                                                nameElement.textContent = cleanLabel(regData.description || '', regData.category || '');
+                                            }
+                                            if (valueElement) {
+                                                valueElement.textContent = regData.value;
+                                                valueElement.className = regData.status === 'OK' ? 'register-value' : 'register-value error';
+                                            }
+                                            if (unitElement) {
+                                                unitElement.textContent = regData.unit || '';
+                                            }
                                         }
-                                        if (unitElement) {
-                                            unitElement.textContent = regData.unit || '';
-                                        }
-                                    }
+                                    });
                                 });
-                            });
                             
                             // Update utility status
                             const statusElement = utilityCard.querySelector('.utility-status');
@@ -2038,6 +2184,12 @@ def create_html_template():
                                                     </div>
                                                 </div>
                                                 <div class="chart-section">
+                                                    <div class="chart-title power">⚡ Power</div>
+                                                    <div class="chart-canvas">
+                                                        <canvas id="power-chart-${utilityId}"></canvas>
+                                                    </div>
+                                                </div>
+                                                <div class="chart-section">
                                                     <div class="chart-title powerfactor">📊 Power Factor</div>
                                                     <div class="chart-canvas">
                                                         <canvas id="powerfactor-chart-${utilityId}"></canvas>
@@ -2057,6 +2209,7 @@ def create_html_template():
                                 // Charts exist, check if chart instances are still valid
                                 const voltageCanvas = document.getElementById(`voltage-chart-${utilityId}`);
                                 const currentCanvas = document.getElementById(`current-chart-${utilityId}`);
+                                const powerCanvas = document.getElementById(`power-chart-${utilityId}`);
                                 const powerFactorCanvas = document.getElementById(`powerfactor-chart-${utilityId}`);
                                 
                                 if (voltageCanvas && (!chartInstances[utilityId] || !chartInstances[utilityId].voltage)) {
@@ -2066,6 +2219,11 @@ def create_html_template():
                                     }, 100);
                                 } else if (currentCanvas && (!chartInstances[utilityId] || !chartInstances[utilityId].current)) {
                                     console.log(`Current chart instance missing for ${utilityId}, reinitializing...`);
+                                    setTimeout(() => {
+                                        initializeCharts(utilityId);
+                                    }, 100);
+                                } else if (powerCanvas && (!chartInstances[utilityId] || !chartInstances[utilityId].power)) {
+                                    console.log(`Power chart instance missing for ${utilityId}, reinitializing...`);
                                     setTimeout(() => {
                                         initializeCharts(utilityId);
                                     }, 100);
@@ -2141,6 +2299,9 @@ def create_html_template():
                     if (chartInstances[utilityId].current) {
                         chartInstances[utilityId].current.destroy();
                     }
+                    if (chartInstances[utilityId].power) {
+                        chartInstances[utilityId].power.destroy();
+                    }
                     if (chartInstances[utilityId].powerFactor) {
                         chartInstances[utilityId].powerFactor.destroy();
                     }
@@ -2187,6 +2348,12 @@ def create_html_template():
                                     <div class="chart-title current">🔌 Current</div>
                                     <div class="chart-canvas">
                                         <canvas id="current-chart-${utilityId}"></canvas>
+                                    </div>
+                                </div>
+                                <div class="chart-section">
+                                    <div class="chart-title power">⚡ Power</div>
+                                    <div class="chart-canvas">
+                                        <canvas id="power-chart-${utilityId}"></canvas>
                                     </div>
                                 </div>
                                 <div class="chart-section">
