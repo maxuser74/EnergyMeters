@@ -767,7 +767,7 @@ def create_html_template():
 
         .charts-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr 1fr 1fr;
             gap: 20px;
             margin-top: 15px;
         }
@@ -798,6 +798,10 @@ def create_html_template():
             border-left-color: #3b82f6;
         }
 
+        .chart-title.powerfactor {
+            border-left-color: #a855f7;
+        }
+
         .chart-canvas {
             height: 200px;
         }
@@ -805,6 +809,12 @@ def create_html_template():
         @media (max-width: 768px) {
             .charts-grid {
                 grid-template-columns: 1fr;
+            }
+        }
+
+        @media (min-width: 769px) and (max-width: 1200px) {
+            .charts-grid {
+                grid-template-columns: 1fr 1fr;
             }
         }
 
@@ -1181,6 +1191,11 @@ def create_html_template():
                 backgroundColor: 'rgba(52, 152, 219, 0.1)',
                 borderColor: 'rgba(52, 152, 219, 1)',
                 pointBackgroundColor: 'rgba(52, 152, 219, 1)'
+            },
+            powerFactor: {
+                backgroundColor: 'rgba(168, 85, 247, 0.1)',
+                borderColor: 'rgba(168, 85, 247, 1)',
+                pointBackgroundColor: 'rgba(168, 85, 247, 1)'
             }
         };
 
@@ -1189,13 +1204,14 @@ def create_html_template():
             if (!chartData[utilityId]) {
                 chartData[utilityId] = {
                     voltage: { labels: [], datasets: [] },
-                    current: { labels: [], datasets: [] }
+                    current: { labels: [], datasets: [] },
+                    powerFactor: { labels: [], datasets: [] }
                 };
             }
 
             // Initialize chart instances
             if (!chartInstances[utilityId]) {
-                chartInstances[utilityId] = { voltage: null, current: null };
+                chartInstances[utilityId] = { voltage: null, current: null, powerFactor: null };
             }
 
             // Create voltage chart
@@ -1245,6 +1261,30 @@ def create_html_template():
                     console.error(`Error creating current chart for ${utilityId}:`, e);
                 }
             }
+
+            // Create power factor chart
+            const powerFactorCanvas = document.getElementById(`powerfactor-chart-${utilityId}`);
+            if (powerFactorCanvas) {
+                // Destroy existing chart if it exists
+                if (chartInstances[utilityId].powerFactor) {
+                    try {
+                        chartInstances[utilityId].powerFactor.destroy();
+                    } catch (e) {
+                        console.log(`Error destroying power factor chart for ${utilityId}:`, e);
+                    }
+                }
+                
+                try {
+                    chartInstances[utilityId].powerFactor = new Chart(powerFactorCanvas, {
+                        type: 'line',
+                        data: chartData[utilityId].powerFactor,
+                        options: getChartOptions('Power Factor')
+                    });
+                    console.log(`Power factor chart initialized for ${utilityId}`);
+                } catch (e) {
+                    console.error(`Error creating power factor chart for ${utilityId}:`, e);
+                }
+            }
         }
 
         function getChartOptions(title) {
@@ -1291,6 +1331,7 @@ def create_html_template():
             if (chartData[utilityId]) {
                 chartData[utilityId].voltage = { labels: [], datasets: [] };
                 chartData[utilityId].current = { labels: [], datasets: [] };
+                chartData[utilityId].powerFactor = { labels: [], datasets: [] };
             }
 
             if (chartInstances[utilityId]) {
@@ -1302,16 +1343,18 @@ def create_html_template():
                     chartInstances[utilityId].current.data = chartData[utilityId].current;
                     chartInstances[utilityId].current.update();
                 }
+                if (chartInstances[utilityId].powerFactor) {
+                    chartInstances[utilityId].powerFactor.data = chartData[utilityId].powerFactor;
+                    chartInstances[utilityId].powerFactor.update();
+                }
             }
         }
 
         function updateCharts(utilityId, utilityData) {
             if (!chartData[utilityId] || !utilityData.registers) return;
 
-            // Check if chart instances exist
-            if (!chartInstances[utilityId] || 
-                !chartInstances[utilityId].voltage || 
-                !chartInstances[utilityId].current) {
+            // Check if chart instances exist (don't require all charts to exist)
+            if (!chartInstances[utilityId]) {
                 console.log(`Chart instances missing for ${utilityId}, skipping update`);
                 return;
             }
@@ -1319,21 +1362,25 @@ def create_html_template():
             const now = new Date().toLocaleTimeString();
             const maxDataPoints = 50; // Keep last 50 data points
 
-            // Prepare voltage and current data
+            // Prepare voltage, current and power factor data
             const voltageData = {};
             const currentData = {};
+            const powerFactorData = {};
 
-            // Extract voltage and current values
+            // Extract voltage, current and power factor values
             for (const [regKey, regData] of Object.entries(utilityData.registers)) {
                 const description = regData.description.toLowerCase();
                 const unit = (regData.unit || '').toLowerCase();
+                const category = (regData.category || '').toLowerCase();
                 const value = parseFloat(regData.value);
 
                 if (!isNaN(value)) {
-                    if (description.includes('voltage') || description.includes('tensione') || unit === 'v') {
+                    if (category === 'voltages' || description.includes('voltage') || description.includes('tensione') || unit === 'v') {
                         voltageData[regData.description] = value;
-                    } else if (description.includes('current') || description.includes('corrente') || unit === 'a') {
+                    } else if (category === 'currents' || description.includes('current') || description.includes('corrente') || unit === 'a') {
                         currentData[regData.description] = value;
+                    } else if (category === 'power_factors' || description.includes('power factor') || description.includes('fattore di potenza') || description.includes('cos')) {
+                        powerFactorData[regData.description] = value;
                     }
                 }
             }
@@ -1386,6 +1433,30 @@ def create_html_template():
                 });
             }
 
+            // Update power factor chart data
+            if (Object.keys(powerFactorData).length > 0) {
+                if (chartData[utilityId].powerFactor.labels.length >= maxDataPoints) {
+                    chartData[utilityId].powerFactor.labels.shift();
+                    chartData[utilityId].powerFactor.datasets.forEach(dataset => dataset.data.shift());
+                }
+
+                chartData[utilityId].powerFactor.labels.push(now);
+
+                // Update datasets
+                Object.entries(powerFactorData).forEach(([description, value], index) => {
+                    if (!chartData[utilityId].powerFactor.datasets[index]) {
+                        chartData[utilityId].powerFactor.datasets[index] = {
+                            label: description,
+                            data: [],
+                            ...chartConfig.powerFactor,
+                            borderColor: `hsl(${270 + index * 30}, 70%, 50%)`,
+                            backgroundColor: `hsla(${270 + index * 30}, 70%, 50%, 0.1)`
+                        };
+                    }
+                    chartData[utilityId].powerFactor.datasets[index].data.push(value);
+                });
+            }
+
             // Update chart instances with error handling
             try {
                 if (chartInstances[utilityId].voltage && chartInstances[utilityId].voltage.canvas) {
@@ -1405,6 +1476,18 @@ def create_html_template():
                 }
             } catch (e) {
                 console.error(`Error updating current chart for ${utilityId}:`, e);
+                // Try to reinitialize the chart
+                setTimeout(() => {
+                    initializeCharts(utilityId);
+                }, 100);
+            }
+
+            try {
+                if (chartInstances[utilityId].powerFactor && chartInstances[utilityId].powerFactor.canvas) {
+                    chartInstances[utilityId].powerFactor.update('none');
+                }
+            } catch (e) {
+                console.error(`Error updating power factor chart for ${utilityId}:`, e);
                 // Try to reinitialize the chart
                 setTimeout(() => {
                     initializeCharts(utilityId);
@@ -1713,6 +1796,12 @@ def create_html_template():
                                         <canvas id="current-chart-${utilityId}"></canvas>
                                     </div>
                                 </div>
+                                <div class="chart-section">
+                                    <div class="chart-title powerfactor">📊 Power Factor</div>
+                                    <div class="chart-canvas">
+                                        <canvas id="powerfactor-chart-${utilityId}"></canvas>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     `;
@@ -1948,6 +2037,12 @@ def create_html_template():
                                                         <canvas id="current-chart-${utilityId}"></canvas>
                                                     </div>
                                                 </div>
+                                                <div class="chart-section">
+                                                    <div class="chart-title powerfactor">📊 Power Factor</div>
+                                                    <div class="chart-canvas">
+                                                        <canvas id="powerfactor-chart-${utilityId}"></canvas>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                     `;
@@ -1962,6 +2057,7 @@ def create_html_template():
                                 // Charts exist, check if chart instances are still valid
                                 const voltageCanvas = document.getElementById(`voltage-chart-${utilityId}`);
                                 const currentCanvas = document.getElementById(`current-chart-${utilityId}`);
+                                const powerFactorCanvas = document.getElementById(`powerfactor-chart-${utilityId}`);
                                 
                                 if (voltageCanvas && (!chartInstances[utilityId] || !chartInstances[utilityId].voltage)) {
                                     console.log(`Voltage chart instance missing for ${utilityId}, reinitializing...`);
@@ -1970,6 +2066,11 @@ def create_html_template():
                                     }, 100);
                                 } else if (currentCanvas && (!chartInstances[utilityId] || !chartInstances[utilityId].current)) {
                                     console.log(`Current chart instance missing for ${utilityId}, reinitializing...`);
+                                    setTimeout(() => {
+                                        initializeCharts(utilityId);
+                                    }, 100);
+                                } else if (powerFactorCanvas && (!chartInstances[utilityId] || !chartInstances[utilityId].powerFactor)) {
+                                    console.log(`Power factor chart instance missing for ${utilityId}, reinitializing...`);
                                     setTimeout(() => {
                                         initializeCharts(utilityId);
                                     }, 100);
@@ -2040,6 +2141,9 @@ def create_html_template():
                     if (chartInstances[utilityId].current) {
                         chartInstances[utilityId].current.destroy();
                     }
+                    if (chartInstances[utilityId].powerFactor) {
+                        chartInstances[utilityId].powerFactor.destroy();
+                    }
                     delete chartInstances[utilityId];
                 }
 
@@ -2083,6 +2187,12 @@ def create_html_template():
                                     <div class="chart-title current">🔌 Current</div>
                                     <div class="chart-canvas">
                                         <canvas id="current-chart-${utilityId}"></canvas>
+                                    </div>
+                                </div>
+                                <div class="chart-section">
+                                    <div class="chart-title powerfactor">📊 Power Factor</div>
+                                    <div class="chart-canvas">
+                                        <canvas id="powerfactor-chart-${utilityId}"></canvas>
                                     </div>
                                 </div>
                             </div>
