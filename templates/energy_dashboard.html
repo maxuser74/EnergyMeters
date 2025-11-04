@@ -323,6 +323,7 @@
             opacity: 0;
             pointer-events: none;
             transform: scale(0.97);
+            display: none;
         }
 
         .charts-grid.expanded {
@@ -423,17 +424,44 @@
         }
 
         .registers-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            display: flex;
+            flex-direction: column;
             gap: 12px;
-            overflow: visible;
+            overflow-x: auto;
+            overflow-y: visible;
+            padding-bottom: 4px;
+            width: 100%;
         }
 
-        .registers-grid.voltage-grid,
-        .registers-grid.current-grid,
-        .registers-grid.power_factor-grid {
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        .registers-row {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(140px, 1fr));
+            gap: 12px;
+            width: 100%;
+        }
+
+        .registers-grid.voltage-grid .registers-row,
+        .registers-grid.current-grid .registers-row,
+        .registers-grid.power_factor-grid .registers-row,
+        .registers-grid.power-grid .registers-row {
+            grid-template-columns: repeat(3, minmax(120px, 1fr));
             gap: 10px;
+        }
+
+        .registers-row .register-badge {
+            width: 100%;
+        }
+
+        @media (max-width: 768px) {
+            .registers-row {
+                grid-template-columns: repeat(3, minmax(120px, 1fr));
+            }
+        }
+
+        @media (max-width: 520px) {
+            .registers-row {
+                grid-template-columns: repeat(3, minmax(100px, 1fr));
+            }
         }
 
         .register-badge {
@@ -607,8 +635,7 @@
                 flex-wrap: wrap;
             }
 
-            .registers-grid {
-                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            .registers-row {
                 gap: 10px;
             }
 
@@ -636,8 +663,8 @@
         }
 
         @media (max-width: 480px) {
-            .registers-grid {
-                grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            .registers-row {
+                grid-template-columns: repeat(3, minmax(100px, 1fr));
             }
 
             .register-badge {
@@ -1585,16 +1612,22 @@
                         // Section CSS class
                         let sectionClass = `${cat}-section`;
                         // Grid class
-                        let gridClass = (cat === 'voltages' || cat === 'currents') ? `${cat.replace('s', '')}-grid` : '';
+                        let gridClass = ''
+                        if (cat === 'voltages' || cat === 'currents') {
+                            gridClass = `${cat.slice(0, -1)}-grid`;
+                        } else if (cat === 'power_factors') {
+                            gridClass = 'power_factor-grid';
+                        } else if (cat === 'power') {
+                            gridClass = 'power-grid';
+                        }
+                        const normalizedCategory = normalizeCategory(cat);
                         // Badge color class is the category name
                         registersHtml += `
                             <div class="readings-section ${sectionClass}">
-                                <div class="section-title">${icon} ${cat.replace(/_/g, ' ').replace(/\w/g, l => l.toUpperCase())} Readings</div>
+                                <div class="section-title">${icon} ${cat.replace(/_/g, ' ').replace(\w/g, l => l.toUpperCase())} Readings</div>
                                 <div class="registers-grid ${gridClass}">
                         `;
-                        for (const reg of categories[cat]) {
-                            registersHtml += createRegisterBadge(reg.data, cat.replace('s', ''));
-                        }
+                        registersHtml += renderRegisterRows(categories[cat], normalizedCategory);
                         registersHtml += '</div></div>';
                     });
                     registersHtml += '</div>';
@@ -1616,16 +1649,22 @@
                         // Section CSS class
                         let sectionClass = `${cat}-section`;
                         // Grid class
-                        let gridClass = (cat === 'voltage' || cat === 'current') ? `${cat}-grid` : '';
+                        let gridClass = ''
+                        if (cat === 'voltage' || cat === 'current') {
+                            gridClass = `${cat}-grid`;
+                        } else if (cat === 'power_factor') {
+                            gridClass = 'power_factor-grid';
+                        } else if (cat === 'power') {
+                            gridClass = 'power-grid';
+                        }
+                        const normalizedCategory = normalizeCategory(cat);
                         // Badge color class is the category name
                         registersHtml += `
                             <div class="readings-section ${sectionClass}">
-                                <div class="section-title">${icon} ${cat.replace(/_/g, ' ').replace(/\w/g, l => l.toUpperCase())} Readings</div>
+                                <div class="section-title">${icon} ${cat.replace(/_/g, ' ').replace(\w/g, l => l.toUpperCase())} Readings</div>
                                 <div class="registers-grid ${gridClass}">
                         `;
-                        for (const reg of categories[cat]) {
-                            registersHtml += createRegisterBadge(reg.data, cat);
-                        }
+                        registersHtml += renderRegisterRows(categories[cat], normalizedCategory);
                         registersHtml += '</div></div>';
                         rowCount++;
                         // If more than maxPerRow, close row and start new
@@ -1706,6 +1745,34 @@
                     </div>
                 </div>
             `;
+        }
+
+        function normalizeCategory(category) {
+            if (!category) return '';
+            if (category === 'power_factors') return 'power_factor';
+            if (category.endsWith('ies')) {
+                return category.slice(0, -3) + 'y';
+            }
+            if (category.endsWith('s')) {
+                return category.slice(0, -1);
+            }
+            return category;
+        }
+
+        function renderRegisterRows(registerList, categoryName) {
+            if (!registerList || registerList.length === 0) {
+                return '';
+            }
+            let rowsHtml = '';
+            for (let i = 0; i < registerList.length; i += 3) {
+                const rowItems = registerList.slice(i, i + 3);
+                rowsHtml += '<div class="registers-row">';
+                rowItems.forEach(reg => {
+                    rowsHtml += createRegisterBadge(reg.data, categoryName);
+                });
+                rowsHtml += '</div>';
+            }
+            return rowsHtml;
         }
 
         function getStatusClass(status) {

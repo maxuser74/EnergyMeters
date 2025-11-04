@@ -622,7 +622,14 @@ def create_html_template():
             border-bottom: 2px solid #374151;
             display: flex;
             justify-content: space-between;
-            align-items: center;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .utility-info {
+            flex: 1 1 280px;
+            min-width: 0;
         }
 
         .utility-info h3 {
@@ -706,6 +713,8 @@ def create_html_template():
             display: flex;
             align-items: center;
             gap: 10px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
         }
 
         .monitor-status {
@@ -716,16 +725,21 @@ def create_html_template():
         }
 
         .power-badge {
-            display: inline-block;
+            display: inline-flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 4px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 8px 16px;
+            padding: 10px 16px;
             border-radius: 8px;
             font-weight: bold;
             font-size: 1.1em;
             margin-top: 10px;
             box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
             transition: all 0.3s;
+            max-width: 100%;
+            flex-wrap: wrap;
         }
 
         .power-badge:hover {
@@ -765,11 +779,21 @@ def create_html_template():
             border: 2px solid #374151;
         }
 
+        .charts-header {
+            text-align: center;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: #cbd5f5;
+            font-size: 0.95em;
+            letter-spacing: 0.5px;
+        }
+
         .charts-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 18px;
             margin-top: 15px;
+            transition: grid-template-columns 0.3s ease;
         }
 
         .chart-section {
@@ -777,6 +801,37 @@ def create_html_template():
             padding: 15px;
             border-radius: 8px;
             border: 2px solid #374151;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            cursor: zoom-in;
+            transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease, opacity 0.25s ease;
+            min-height: 240px;
+        }
+
+        .chart-section:hover {
+            transform: translateY(-4px);
+            border-color: #4b5563;
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.45);
+        }
+
+        .chart-section.expanded {
+            grid-column: 1 / -1;
+            cursor: zoom-out;
+            min-height: 360px;
+            box-shadow: 0 20px 40px rgba(15, 23, 42, 0.6);
+            border-color: #6366f1;
+        }
+
+        .chart-section.collapsed {
+            opacity: 0;
+            pointer-events: none;
+            transform: scale(0.97);
+            display: none;
+        }
+
+        .charts-grid.expanded {
+            grid-template-columns: 1fr;
         }
 
         .chart-title {
@@ -788,6 +843,7 @@ def create_html_template():
             color: #9ca3af;
             border-left: 4px solid;
             background: transparent;
+            transition: color 0.3s ease;
         }
 
         .chart-title.voltage {
@@ -807,7 +863,12 @@ def create_html_template():
         }
 
         .chart-canvas {
-            height: 200px;
+            height: 220px;
+            transition: height 0.3s ease;
+        }
+
+        .chart-section.expanded .chart-canvas {
+            height: 360px;
         }
 
         @media (max-width: 768px) {
@@ -868,21 +929,49 @@ def create_html_template():
 
         .registers-grid {
             display: flex;
-            flex-wrap: nowrap;
-            gap: 10px;
+            flex-direction: column;
+            gap: 12px;
             overflow-x: auto;
+            overflow-y: visible;
+            padding-bottom: 4px;
+            width: 100%;
         }
 
-        .registers-grid.voltage-grid, 
-        .registers-grid.current-grid,
-        .registers-grid.power_factor-grid {
-            gap: 6px;
+        .registers-row {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(140px, 1fr));
+            gap: 12px;
+            width: 100%;
+        }
+
+        .registers-grid.voltage-grid .registers-row,
+        .registers-grid.current-grid .registers-row,
+        .registers-grid.power_factor-grid .registers-row,
+        .registers-grid.power-grid .registers-row {
+            grid-template-columns: repeat(3, minmax(120px, 1fr));
+            gap: 10px;
+        }
+
+        .registers-row .register-badge {
+            width: 100%;
+        }
+
+        @media (max-width: 768px) {
+            .registers-row {
+                grid-template-columns: repeat(3, minmax(120px, 1fr));
+            }
+        }
+
+        @media (max-width: 520px) {
+            .registers-row {
+                grid-template-columns: repeat(3, minmax(100px, 1fr));
+            }
         }
 
         .register-badge {
             background: #1f2937;
             border: 2px solid #4b5563;
-            padding: 10px;
+            padding: 12px;
             border-radius: 8px;
             text-align: center;
             transition: all 0.3s ease;
@@ -891,32 +980,38 @@ def create_html_template():
             flex-direction: column;
             align-items: center;
             justify-content: center;
+            width: 100%;
+            min-height: 120px;
+            position: relative;
         }
 
-        .register-badge.voltage, 
+        .register-badge.voltage,
         .register-badge.current,
         .register-badge.power_factor {
-            padding: 5px;
+            padding: 10px;
         }
 
         .register-name {
             font-weight: 600;
             color: #9ca3af;
-            margin-bottom: 6px;
-            font-size: 0.7em;
-            line-height: 1.1;
-            min-height: 28px;
+            margin-bottom: 8px;
+            font-size: 0.75em;
+            line-height: 1.2;
+            min-height: 32px;
             display: flex;
             align-items: center;
             justify-content: center;
+            text-align: center;
+            word-break: break-word;
+            width: 100%;
         }
 
-        .register-badge.voltage .register-name, 
+        .register-badge.voltage .register-name,
         .register-badge.current .register-name,
         .register-badge.power_factor .register-name {
-            font-size: 0.65em;
-            min-height: 24px;
-            margin-bottom: 4px;
+            font-size: 0.7em;
+            min-height: 28px;
+            margin-bottom: 6px;
         }
 
         .register-measure {
@@ -948,21 +1043,25 @@ def create_html_template():
         .register-badge.voltage {
             border-color: #ef4444;
             background: #1f2937;
+            box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.2);
         }
 
         .register-badge.current {
             border-color: #3b82f6;
             background: #1f2937;
+            box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.2);
         }
 
         .register-badge.energy {
             border-color: #10b981;
             background: #1f2937;
+            box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.2);
         }
 
         .register-badge.other {
             border-color: #a855f7;
             background: #1f2937;
+            box-shadow: inset 0 0 0 1px rgba(168, 85, 247, 0.2);
         }
 
         /* Dynamic badge color for new categories (fallback: HSL by category name hash) */
@@ -1040,8 +1139,7 @@ def create_html_template():
                 flex-wrap: wrap;
             }
 
-            .registers-grid {
-                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            .registers-row {
                 gap: 10px;
             }
 
@@ -1069,8 +1167,8 @@ def create_html_template():
         }
 
         @media (max-width: 480px) {
-            .registers-grid {
-                grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            .registers-row {
+                grid-template-columns: repeat(3, minmax(100px, 1fr));
             }
 
             .register-badge {
@@ -1178,6 +1276,125 @@ def create_html_template():
         let chartInstances = {}; // Store chart instances for each utility
         let chartData = {}; // Store chart data history for each utility
 
+        const domRefs = {
+            connectionIndicator: document.getElementById('connectionIndicator'),
+            connectionStatus: document.getElementById('connectionStatus'),
+            lastUpdate: document.getElementById('lastUpdate'),
+            utilitiesGrid: document.getElementById('utilitiesGrid'),
+            utilitiesCount: document.getElementById('utilitiesCount'),
+            monitoringCount: document.getElementById('monitoringCount')
+        };
+
+        const chartSections = [
+            { key: 'voltage', title: '⚡ Voltage', className: 'voltage', canvasId: 'voltage' },
+            { key: 'current', title: '🔌 Current', className: 'current', canvasId: 'current' },
+            { key: 'power', title: '⚡ Power', className: 'power', canvasId: 'power' },
+            { key: 'powerFactor', title: '📊 Power Factor', className: 'powerfactor', canvasId: 'powerfactor' }
+        ];
+
+        function getChartsHtml(utilityId) {
+            const sectionsHtml = chartSections.map(section => `
+                                <div class="chart-section" data-chart-type="${section.key}">
+                                    <div class="chart-title ${section.className}">${section.title}</div>
+                                    <div class="chart-canvas">
+                                        <canvas id="${section.canvasId}-chart-${utilityId}"></canvas>
+                                    </div>
+                                </div>
+            `).join('');
+
+            return `
+                        <div class="charts-container" id="charts-${utilityId}">
+                            <div class="charts-header">📈 Real-time Monitoring Charts</div>
+                            <div class="charts-grid" data-utility="${utilityId}">
+                ${sectionsHtml}
+                            </div>
+                        </div>
+            `;
+        }
+
+        function initializeChartInteractions(utilityId) {
+            const grid = document.querySelector(`#charts-${utilityId} .charts-grid`);
+            if (!grid || grid.dataset.interactionsInitialized === 'true') {
+                return;
+            }
+
+            grid.dataset.interactionsInitialized = 'true';
+            grid.querySelectorAll('.chart-section').forEach(section => {
+                section.addEventListener('click', () => {
+                    toggleChartExpansion(utilityId, section.dataset.chartType);
+                });
+            });
+        }
+
+        function toggleChartExpansion(utilityId, chartKey) {
+            const grid = document.querySelector(`#charts-${utilityId} .charts-grid`);
+            if (!grid || !chartKey) {
+                return;
+            }
+
+            const targetSection = grid.querySelector(`.chart-section[data-chart-type="${chartKey}"]`);
+            if (!targetSection) {
+                return;
+            }
+
+            const isExpanded = targetSection.classList.contains('expanded');
+            const sections = Array.from(grid.querySelectorAll('.chart-section'));
+
+            if (isExpanded) {
+                grid.classList.remove('expanded');
+                sections.forEach(section => {
+                    section.classList.remove('expanded');
+                    section.classList.remove('collapsed');
+                });
+            } else {
+                grid.classList.add('expanded');
+                sections.forEach(section => {
+                    if (section === targetSection) {
+                        section.classList.add('expanded');
+                        section.classList.remove('collapsed');
+                    } else {
+                        section.classList.remove('expanded');
+                        section.classList.add('collapsed');
+                    }
+                });
+            }
+
+            requestAnimationFrame(() => {
+                const instances = chartInstances[utilityId];
+                if (!instances) return;
+
+                const keysToResize = isExpanded ? chartSections.map(section => section.key) : [chartKey];
+                keysToResize.forEach(key => {
+                    const chart = instances[key];
+                    if (chart && typeof chart.resize === 'function') {
+                        chart.resize();
+                    }
+                });
+            });
+        }
+
+        function applyDynamicBadgeColors(context = document) {
+            const badges = context.querySelectorAll('.register-badge[data-category]');
+            badges.forEach(badge => {
+                const cat = badge.getAttribute('data-category');
+                if (!cat) return;
+
+                if (badge.classList.contains('frequency') ||
+                    badge.classList.contains('temperature') ||
+                    badge.classList.contains('power_factor')) {
+                    return;
+                }
+
+                let hash = 0;
+                for (let i = 0; i < cat.length; i++) {
+                    hash = cat.charCodeAt(i) + ((hash << 5) - hash);
+                }
+                const hue = Math.abs(hash) % 360;
+                badge.style.borderColor = `hsl(${hue},70%,50%)`;
+                badge.style.background = `linear-gradient(135deg, hsl(${hue},100%,98%), hsl(${hue},100%,92%))`;
+            });
+        }
+
         // Chart configuration
         const chartConfig = {
             voltage: {
@@ -1186,7 +1403,6 @@ def create_html_template():
                 pointBackgroundColor: 'rgba(231, 76, 60, 1)',
                 tension: 0.45,
                 cubicInterpolationMode: 'monotone',
-                pointRadius: 0,
                 fill: false
             },
             current: {
@@ -1195,7 +1411,6 @@ def create_html_template():
                 pointBackgroundColor: 'rgba(52, 152, 219, 1)',
                 tension: 0.45,
                 cubicInterpolationMode: 'monotone',
-                pointRadius: 0,
                 fill: false
             },
             power: {
@@ -1204,7 +1419,6 @@ def create_html_template():
                 pointBackgroundColor: 'rgba(249, 115, 22, 1)',
                 tension: 0.45,
                 cubicInterpolationMode: 'monotone',
-                pointRadius: 0,
                 fill: false
             },
             powerFactor: {
@@ -1213,7 +1427,6 @@ def create_html_template():
                 pointBackgroundColor: 'rgba(168, 85, 247, 1)',
                 tension: 0.45,
                 cubicInterpolationMode: 'monotone',
-                pointRadius: 0,
                 fill: false
             }
         };
@@ -1232,13 +1445,13 @@ def create_html_template():
             let cleaned = label.trim();
             const cat = (category || '').toLowerCase();
             const removalPatterns = {
-                voltages: [/\bvoltages?\b/gi],
-                voltage: [/\bvoltages?\b/gi],
-                currents: [/\bcurrents?\b/gi],
-                current: [/\bcurrents?\b/gi],
-                power: [/\bpower\b/gi],
-                power_factors: [/\bpower\s*factors?\b/gi],
-                power_factor: [/\bpower\s*factors?\b/gi]
+                voltages: [/voltages?/gi],
+                voltage: [/voltages?/gi],
+                currents: [/currents?/gi],
+                current: [/currents?/gi],
+                power: [/power/gi],
+                power_factors: [/power\s*factors?/gi],
+                power_factor: [/power\s*factors?/gi]
             };
 
             const patterns = removalPatterns[cat];
@@ -1350,7 +1563,7 @@ def create_html_template():
                         console.log(`Error destroying power factor chart for ${utilityId}:`, e);
                     }
                 }
-                
+
                 try {
                     chartInstances[utilityId].powerFactor = new Chart(powerFactorCanvas, {
                         type: 'line',
@@ -1362,19 +1575,47 @@ def create_html_template():
                     console.error(`Error creating power factor chart for ${utilityId}:`, e);
                 }
             }
+
+            initializeChartInteractions(utilityId);
         }
 
         function getChartOptions(title) {
             return {
                 responsive: true,
                 maintainAspectRatio: false,
+                interaction: {
+                    mode: 'nearest',
+                    intersect: false
+                },
+                layout: {
+                    padding: { top: 8, right: 8, bottom: 8, left: 8 }
+                },
                 plugins: {
                     legend: {
                         display: true,
-                        position: 'top'
+                        position: 'bottom',
+                        labels: {
+                            color: '#cbd5f5',
+                            boxWidth: 10,
+                            usePointStyle: true,
+                            pointStyle: 'circle',
+                            padding: 10,
+                            font: {
+                                size: 11,
+                                family: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif'
+                            }
+                        }
                     },
                     title: {
                         display: false
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.85)',
+                        titleColor: '#f8fafc',
+                        bodyColor: '#e2e8f0',
+                        borderColor: '#475569',
+                        borderWidth: 1,
+                        padding: 10
                     }
                 },
                 scales: {
@@ -1382,27 +1623,44 @@ def create_html_template():
                         display: true,
                         title: {
                             display: true,
-                            text: 'Time'
+                            text: 'Time',
+                            color: '#94a3b8'
+                        },
+                        grid: {
+                            color: 'rgba(148, 163, 184, 0.08)'
+                        },
+                        ticks: {
+                            color: '#94a3b8',
+                            maxRotation: 0,
+                            autoSkip: true,
+                            maxTicksLimit: 6
                         }
                     },
-                  y: {
-                      display: true,
-                      title: {
-                          display: true,
-                          text: title
-                      }
-                  }
-              },
-              elements: {
-                  point: {
-                      radius: 1,
-                      hoverRadius: 3
-                  },
-                  line: {
-                      tension: 0.45,
-                      borderWidth: 2
-                  }
-              }
+                    y: {
+                        display: true,
+                        title: {
+                            display: true,
+                            text: title,
+                            color: '#94a3b8'
+                        },
+                        grid: {
+                            color: 'rgba(148, 163, 184, 0.12)'
+                        },
+                        ticks: {
+                            color: '#cbd5f5'
+                        }
+                    }
+                },
+                elements: {
+                    point: {
+                        radius: 2,
+                        hoverRadius: 4
+                    },
+                    line: {
+                        tension: 0.45,
+                        borderWidth: 2
+                    }
+                }
             };
         }
 
@@ -1672,7 +1930,7 @@ def create_html_template():
                 const data = await response.json();
                 
                 console.log('Configuration loaded:', data);
-                document.getElementById('utilitiesCount').textContent = 
+                domRefs.utilitiesCount.textContent =
                     `Utilities: ${data.utilities_count} | Registers: ${data.registers_count}`;
                 
             } catch (error) {
@@ -1696,39 +1954,33 @@ def create_html_template():
         }
 
         function updateUI(data) {
-            // Update connection status
-            const indicator = document.getElementById('connectionIndicator');
-            const status = document.getElementById('connectionStatus');
-            const lastUpdate = document.getElementById('lastUpdate');
-            
+            if (!data) return;
+
             if (data.connection_status && data.connection_status.includes('Connected')) {
-                indicator.className = 'status-indicator connected';
-                status.textContent = data.connection_status;
+                domRefs.connectionIndicator.className = 'status-indicator connected';
+                domRefs.connectionStatus.textContent = data.connection_status;
             } else {
-                indicator.className = 'status-indicator';
-                status.textContent = data.connection_status || 'Disconnected';
+                domRefs.connectionIndicator.className = 'status-indicator';
+                domRefs.connectionStatus.textContent = data.connection_status || 'Disconnected';
             }
-            
-            lastUpdate.textContent = `Last Update: ${data.last_update || 'Never'}`;
-            
-            // Update utilities grid
-            const grid = document.getElementById('utilitiesGrid');
-            
+
+            domRefs.lastUpdate.textContent = `Last Update: ${data.last_update || 'Never'}`;
+
             if (!data.readings || Object.keys(data.readings).length === 0) {
-                grid.innerHTML = `
-                    <div class="no-data">
-                        <h3>No data available</h3>
-                        <p>Click "Refresh All" to load readings from all utilities.</p>
-                    </div>
-                `;
+                requestAnimationFrame(() => {
+                    domRefs.utilitiesGrid.innerHTML = `
+                        <div class="no-data">
+                            <h3>No data available</h3>
+                            <p>Click "Refresh All" to load readings from all utilities.</p>
+                        </div>
+                    `;
+                });
                 return;
             }
-            
-            // Check for utilities that no longer exist in the new configuration
+
             const currentUtilityIds = Object.keys(data.readings);
             const monitoredUtilityIds = Object.keys(monitoringIntervals);
-            
-            // Stop monitoring for utilities that no longer exist
+
             monitoredUtilityIds.forEach(utilityId => {
                 if (!currentUtilityIds.includes(utilityId)) {
                     console.log(`Stopping monitoring for removed utility: ${utilityId}`);
@@ -1736,15 +1988,25 @@ def create_html_template():
                     delete monitoringIntervals[utilityId];
                 }
             });
-            
+
             let html = '';
-            for (const [utilityId, utilityData] of Object.entries(data.readings)) {
-                html += createUtilityCard(utilityId, utilityData);
-            }
-            
-            grid.innerHTML = html;
-            
-            // Update monitoring count
+            currentUtilityIds.forEach(utilityId => {
+                html += createUtilityCard(utilityId, data.readings[utilityId]);
+            });
+
+            const monitoredActiveIds = currentUtilityIds.filter(utilityId => monitoringIntervals.hasOwnProperty(utilityId));
+
+            requestAnimationFrame(() => {
+                domRefs.utilitiesGrid.innerHTML = html;
+                applyDynamicBadgeColors(domRefs.utilitiesGrid);
+
+                monitoredActiveIds.forEach(utilityId => {
+                    setTimeout(() => {
+                        initializeCharts(utilityId);
+                    }, 0);
+                });
+            });
+
             updateMonitoringCount();
         }
 
@@ -1854,16 +2116,22 @@ def create_html_template():
                         // Section CSS class
                         let sectionClass = `${cat}-section`;
                         // Grid class
-                        let gridClass = (cat === 'voltages' || cat === 'currents') ? `${cat.replace('s', '')}-grid` : '';
+                        let gridClass = ''
+                        if (cat === 'voltages' || cat === 'currents') {
+                            gridClass = `${cat.slice(0, -1)}-grid`;
+                        } else if (cat === 'power_factors') {
+                            gridClass = 'power_factor-grid';
+                        } else if (cat === 'power') {
+                            gridClass = 'power-grid';
+                        }
+                        const normalizedCategory = normalizeCategory(cat);
                         // Badge color class is the category name
                         registersHtml += `
                             <div class="readings-section ${sectionClass}">
-                                <div class="section-title">${icon} ${cat.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} Readings</div>
+                                <div class="section-title">${icon} ${cat.replace(/_/g, ' ').replace(\w/g, l => l.toUpperCase())} Readings</div>
                                 <div class="registers-grid ${gridClass}">
                         `;
-                        for (const reg of categories[cat]) {
-                            registersHtml += createRegisterBadge(reg.data, cat.replace('s', ''));
-                        }
+                        registersHtml += renderRegisterRows(categories[cat], normalizedCategory);
                         registersHtml += '</div></div>';
                     });
                     registersHtml += '</div>';
@@ -1885,16 +2153,22 @@ def create_html_template():
                         // Section CSS class
                         let sectionClass = `${cat}-section`;
                         // Grid class
-                        let gridClass = (cat === 'voltage' || cat === 'current') ? `${cat}-grid` : '';
+                        let gridClass = ''
+                        if (cat === 'voltage' || cat === 'current') {
+                            gridClass = `${cat}-grid`;
+                        } else if (cat === 'power_factor') {
+                            gridClass = 'power_factor-grid';
+                        } else if (cat === 'power') {
+                            gridClass = 'power-grid';
+                        }
+                        const normalizedCategory = normalizeCategory(cat);
                         // Badge color class is the category name
                         registersHtml += `
                             <div class="readings-section ${sectionClass}">
-                                <div class="section-title">${icon} ${cat.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} Readings</div>
+                                <div class="section-title">${icon} ${cat.replace(/_/g, ' ').replace(\w/g, l => l.toUpperCase())} Readings</div>
                                 <div class="registers-grid ${gridClass}">
                         `;
-                        for (const reg of categories[cat]) {
-                            registersHtml += createRegisterBadge(reg.data, cat);
-                        }
+                        registersHtml += renderRegisterRows(categories[cat], normalizedCategory);
                         registersHtml += '</div></div>';
                         rowCount++;
                         // If more than maxPerRow, close row and start new
@@ -1906,41 +2180,8 @@ def create_html_template():
                 }
                 
                 registersHtml += '</div>';
-                // Add charts section if monitoring is active
                 if (isMonitoring) {
-                    registersHtml += `
-                        <div class="charts-container" id="charts-${utilityId}">
-                            <div style="text-align: center; font-weight: bold; margin-bottom: 10px;">
-                                📈 Real-time Monitoring Charts
-                            </div>
-                            <div class="charts-grid">
-                                <div class="chart-section">
-                                    <div class="chart-title voltage">⚡ Voltage</div>
-                                    <div class="chart-canvas">
-                                        <canvas id="voltage-chart-${utilityId}"></canvas>
-                                    </div>
-                                </div>
-                                <div class="chart-section">
-                                    <div class="chart-title current">🔌 Current</div>
-                                    <div class="chart-canvas">
-                                        <canvas id="current-chart-${utilityId}"></canvas>
-                                    </div>
-                                </div>
-                                <div class="chart-section">
-                                    <div class="chart-title power">⚡ Power</div>
-                                    <div class="chart-canvas">
-                                        <canvas id="power-chart-${utilityId}"></canvas>
-                                    </div>
-                                </div>
-                                <div class="chart-section">
-                                    <div class="chart-title powerfactor">📊 Power Factor</div>
-                                    <div class="chart-canvas">
-                                        <canvas id="powerfactor-chart-${utilityId}"></canvas>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    `;
+                    registersHtml += getChartsHtml(utilityId);
                 }
             } else {
                 registersHtml = '<div class="no-data"><p>No register data available</p></div>';
@@ -1991,7 +2232,7 @@ def create_html_template():
             // Show the type/category in the badge for clarity
             let typeLabel = '';
             if (regData.category && regData.category !== category) {
-                typeLabel = `<div class='register-type'>${regData.category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</div>`;
+                typeLabel = `<div class='register-type'>${regData.category.replace(/_/g, ' ').replace(/\w/g, l => l.toUpperCase())}</div>`;
             }
             if (regData.description) {
                 attrParts.push(`data-description="${escapeAttribute(regData.description)}"`);
@@ -2010,22 +2251,33 @@ def create_html_template():
             `;
         }
 
-        // Dynamic coloring for unknown categories using HSL hash
-        document.addEventListener('DOMContentLoaded', function() {
-            setTimeout(() => {
-                document.querySelectorAll('.register-badge[data-category]').forEach(badge => {
-                    const cat = badge.getAttribute('data-category');
-                    if (!badge.classList.contains('frequency') && !badge.classList.contains('temperature') && !badge.classList.contains('power_factor')) {
-                        // Hash category name to HSL color
-                        let hash = 0;
-                        for (let i = 0; i < cat.length; i++) hash = cat.charCodeAt(i) + ((hash << 5) - hash);
-                        const hue = Math.abs(hash) % 360;
-                        badge.style.borderColor = `hsl(${hue},70%,50%)`;
-                        badge.style.background = `linear-gradient(135deg, hsl(${hue},100%,98%), hsl(${hue},100%,92%))`;
-                    }
+        function normalizeCategory(category) {
+            if (!category) return '';
+            if (category === 'power_factors') return 'power_factor';
+            if (category.endsWith('ies')) {
+                return category.slice(0, -3) + 'y';
+            }
+            if (category.endsWith('s')) {
+                return category.slice(0, -1);
+            }
+            return category;
+        }
+
+        function renderRegisterRows(registerList, categoryName) {
+            if (!registerList || registerList.length === 0) {
+                return '';
+            }
+            let rowsHtml = '';
+            for (let i = 0; i < registerList.length; i += 3) {
+                const rowItems = registerList.slice(i, i + 3);
+                rowsHtml += '<div class="registers-row">';
+                rowItems.forEach(reg => {
+                    rowsHtml += createRegisterBadge(reg.data, categoryName);
                 });
-            }, 100);
-        });
+                rowsHtml += '</div>';
+            }
+            return rowsHtml;
+        }
 
         function getStatusClass(status) {
             if (status === 'OK') return 'status-ok';
@@ -2048,7 +2300,7 @@ def create_html_template():
                 if (data.success) {
                     // Update utilities count if configuration changed
                     if (data.utilities_count !== undefined && data.registers_count !== undefined) {
-                        document.getElementById('utilitiesCount').textContent = 
+                        domRefs.utilitiesCount.textContent =
                             `Utilities: ${data.utilities_count} | Registers: ${data.registers_count}`;
                     }
                     
@@ -2057,7 +2309,8 @@ def create_html_template():
                         console.log('Configuration reloaded:', data.message);
                         let message = data.message;
                         if (data.changes && data.changes !== "No changes detected") {
-                            message += `\nChanges: ${data.changes}`;
+                            message += `
+Changes: ${data.changes}`;
                         }
                         showSuccess(message);
                     }
@@ -2113,13 +2366,13 @@ def create_html_template():
                         
                         // Update register values in the existing card
                         const utilityCard = document.getElementById(`utility-${utilityId}`);
-                            if (utilityCard && data.utility_data.registers) {
-                                Object.entries(data.utility_data.registers).forEach(([regKey, regData]) => {
-                                    // Update register badges
-                                    const registerBadges = utilityCard.querySelectorAll('.register-badge');
-                                    registerBadges.forEach(badge => {
-                                        const originalDescription = badge.getAttribute('data-description');
-                                        if (originalDescription && originalDescription === regData.description) {
+                        if (utilityCard && data.utility_data.registers) {
+                            Object.entries(data.utility_data.registers).forEach(([regKey, regData]) => {
+                                // Update register badges
+                                const registerBadges = utilityCard.querySelectorAll('.register-badge');
+                                registerBadges.forEach(badge => {
+                                    const originalDescription = badge.getAttribute('data-description');
+                                    if (originalDescription && originalDescription === regData.description) {
                                             badge.setAttribute('data-description', regData.description || '');
                                             const nameElement = badge.querySelector('.register-name');
                                             const valueElement = badge.querySelector('.register-value');
@@ -2138,7 +2391,9 @@ def create_html_template():
                                         }
                                     });
                                 });
-                            
+
+                                applyDynamicBadgeColors(utilityCard);
+
                             // Update utility status
                             const statusElement = utilityCard.querySelector('.utility-status');
                             if (statusElement) {
@@ -2161,46 +2416,12 @@ def create_html_template():
                             // Ensure charts are still present and functioning
                             const chartsContainer = document.getElementById(`charts-${utilityId}`);
                             if (!chartsContainer) {
-                                // Charts container is missing, recreate it
                                 console.log(`Charts missing for ${utilityId}, recreating...`);
                                 const registersContainer = utilityCard.querySelector('.registers-container');
                                 if (registersContainer) {
-                                    const chartsHtml = `
-                                        <div class="charts-container" id="charts-${utilityId}">
-                                            <div style="text-align: center; font-weight: bold; margin-bottom: 10px;">
-                                                📈 Real-time Monitoring Charts
-                                            </div>
-                                            <div class="charts-grid">
-                                                <div class="chart-section">
-                                                    <div class="chart-title voltage">⚡ Voltage</div>
-                                                    <div class="chart-canvas">
-                                                        <canvas id="voltage-chart-${utilityId}"></canvas>
-                                                    </div>
-                                                </div>
-                                                <div class="chart-section">
-                                                    <div class="chart-title current">🔌 Current</div>
-                                                    <div class="chart-canvas">
-                                                        <canvas id="current-chart-${utilityId}"></canvas>
-                                                    </div>
-                                                </div>
-                                                <div class="chart-section">
-                                                    <div class="chart-title power">⚡ Power</div>
-                                                    <div class="chart-canvas">
-                                                        <canvas id="power-chart-${utilityId}"></canvas>
-                                                    </div>
-                                                </div>
-                                                <div class="chart-section">
-                                                    <div class="chart-title powerfactor">📊 Power Factor</div>
-                                                    <div class="chart-canvas">
-                                                        <canvas id="powerfactor-chart-${utilityId}"></canvas>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    `;
+                                    const chartsHtml = getChartsHtml(utilityId);
                                     registersContainer.insertAdjacentHTML('afterend', chartsHtml);
-                                    
-                                    // Reinitialize charts
+
                                     setTimeout(() => {
                                         initializeCharts(utilityId);
                                     }, 100);
@@ -2241,6 +2462,10 @@ def create_html_template():
                         if (utilityCard) {
                             const newCardHtml = createUtilityCard(utilityId, data.utility_data);
                             utilityCard.outerHTML = newCardHtml;
+                            const updatedCard = document.getElementById(`utility-${utilityId}`);
+                            if (updatedCard) {
+                                applyDynamicBadgeColors(updatedCard);
+                            }
                         }
                     }
                 } else {
@@ -2332,39 +2557,7 @@ def create_html_template():
                 const utilityCard = document.getElementById(`utility-${utilityId}`);
                 const registersContainer = utilityCard.querySelector('.registers-container');
                 if (registersContainer && !document.getElementById(`charts-${utilityId}`)) {
-                    const chartsHtml = `
-                        <div class="charts-container" id="charts-${utilityId}">
-                            <div style="text-align: center; font-weight: bold; margin-bottom: 10px;">
-                                📈 Real-time Monitoring Charts
-                            </div>
-                            <div class="charts-grid">
-                                <div class="chart-section">
-                                    <div class="chart-title voltage">⚡ Voltage</div>
-                                    <div class="chart-canvas">
-                                        <canvas id="voltage-chart-${utilityId}"></canvas>
-                                    </div>
-                                </div>
-                                <div class="chart-section">
-                                    <div class="chart-title current">🔌 Current</div>
-                                    <div class="chart-canvas">
-                                        <canvas id="current-chart-${utilityId}"></canvas>
-                                    </div>
-                                </div>
-                                <div class="chart-section">
-                                    <div class="chart-title power">⚡ Power</div>
-                                    <div class="chart-canvas">
-                                        <canvas id="power-chart-${utilityId}"></canvas>
-                                    </div>
-                                </div>
-                                <div class="chart-section">
-                                    <div class="chart-title powerfactor">📊 Power Factor</div>
-                                    <div class="chart-canvas">
-                                        <canvas id="powerfactor-chart-${utilityId}"></canvas>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    `;
+                    const chartsHtml = getChartsHtml(utilityId);
                     registersContainer.insertAdjacentHTML('afterend', chartsHtml);
                 }
 
@@ -2392,7 +2585,7 @@ def create_html_template():
 
         function updateMonitoringCount() {
             const monitoringCount = Object.keys(monitoringIntervals).length;
-            const countElement = document.getElementById('monitoringCount');
+            const countElement = domRefs.monitoringCount;
             if (countElement) {
                 countElement.textContent = `Live Monitoring: ${monitoringCount}`;
                 countElement.style.color = monitoringCount > 0 ? '#e74c3c' : '#7f8c8d';
@@ -2401,11 +2594,11 @@ def create_html_template():
         }
 
         function showError(message) {
-            const grid = document.getElementById('utilitiesGrid');
+            const grid = domRefs.utilitiesGrid;
             const errorDiv = document.createElement('div');
             errorDiv.className = 'error-message';
             errorDiv.textContent = message;
-            
+
             // Insert at the top
             grid.insertBefore(errorDiv, grid.firstChild);
             
@@ -2418,7 +2611,7 @@ def create_html_template():
         }
 
         function showSuccess(message) {
-            const grid = document.getElementById('utilitiesGrid');
+            const grid = domRefs.utilitiesGrid;
             const successDiv = document.createElement('div');
             successDiv.className = 'success-message';
             successDiv.textContent = message;
