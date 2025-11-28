@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Energy Meters Logger</title>
+    <style>
+        body {
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            color: #4ec9b0;
+            text-align: center;
+        }
+        .status-bar {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #9cdcfe;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background-color: #252526;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #3e3e42;
+        }
+        th {
+            background-color: #333333;
+            color: #569cd6;
+            position: sticky;
+            top: 0;
+        }
+        tr:hover {
+            background-color: #2d2d30;
+        }
+        .status-ok { color: #4caf50; }
+        .status-error { color: #f44336; }
+        .status-reading { color: #ffeb3b; }
+        .status-pending { color: #808080; }
+        
+        .val-cell {
+            font-family: 'Consolas', 'Courier New', monospace;
+        }
+        
+        /* Modal Styles */
+        .modal {
+            display: none; 
+            position: fixed; 
+            z-index: 1; 
+            left: 0;
+            top: 0;
+            width: 100%; 
+            height: 100%; 
+            overflow: auto; 
+            background-color: rgba(0,0,0,0.8); 
+        }
+        .modal-content {
+            background-color: #252526;
+            margin: 10% auto; 
+            padding: 20px;
+            border: 1px solid #3e3e42;
+            width: 50%; 
+            color: #d4d4d4;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+        .file-list {
+            list-style-type: none;
+            padding: 0;
+        }
+        .file-list li {
+            padding: 15px;
+            border-bottom: 1px solid #3e3e42;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .file-list li:hover {
+            background-color: #37373d;
+            color: #4ec9b0;
+        }
+        .file-list li:last-child {
+            border-bottom: none;
+        }
+        .btn-change {
+            background-color: #0e639c;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            cursor: pointer;
+            border-radius: 4px;
+            margin-left: 10px;
+        }
+        .btn-change:hover {
+            background-color: #1177bb;
+        }
+        .btn-pause {
+            background-color: #d4d4d4;
+            color: #1e1e1e;
+            border: none;
+            padding: 8px 16px;
+            cursor: pointer;
+            border-radius: 4px;
+            margin-left: 10px;
+            font-weight: bold;
+        }
+        .btn-pause.paused {
+            background-color: #ffeb3b;
+            color: #000;
+        }
+        .btn-cancel {
+            background-color: #3e3e42;
+            color: #d4d4d4;
+            border: none;
+            padding: 8px 16px;
+            cursor: pointer;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .btn-cancel:hover {
+            background-color: #505055;
+        }
+        .close-modal {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .close-modal:hover {
+            color: white;
+        }
+        .about-content {
+            text-align: center;
+        }
+        .about-content h2 {
+            color: #4ec9b0;
+        }
+        .about-content p {
+            font-size: 1.2em;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>
+        Energy Meters Live View 
+        <button id="btnPause" class="btn-pause" onclick="togglePause()">Pause</button>
+        <button class="btn-change" style="background-color: #333;" onclick="showAbout()">About</button>
+    </h1>
+    
+    <div style="position: absolute; top: 25px; right: 30px; display: flex; flex-direction: column; align-items: flex-end; gap: 5px;">
+        <label style="color: #d4d4d4; cursor: pointer; font-size: 1.1em;">
+            <input type="checkbox" id="showTotalKw" onchange="renderTableFromCache()"> Show Total kW
+        </label>
+        <div style="margin-top: 5px;">
+            <label style="color: #d4d4d4; cursor: pointer; margin-right: 10px;">
+                <input type="radio" name="currentFilter" value="all" checked onchange="handleFilterChange(); renderTableFromCache()"> All
+            </label>
+            <label style="color: #d4d4d4; cursor: pointer; margin-right: 10px;">
+                <input type="radio" name="currentFilter" value="high" onchange="handleFilterChange(); renderTableFromCache()"> > 5A
+            </label>
+            <label style="color: #d4d4d4; cursor: pointer; margin-right: 10px;">
+                <input type="radio" name="currentFilter" value="high20" onchange="handleFilterChange(); renderTableFromCache()"> > 20A
+            </label>
+            <label style="color: #d4d4d4; cursor: pointer; margin-right: 10px;">
+                <input type="radio" name="currentFilter" value="high40" onchange="handleFilterChange(); renderTableFromCache()"> > 40A
+            </label>
+            <label style="color: #d4d4d4; cursor: pointer;">
+                <input type="checkbox" id="showErrors" onchange="handleFilterChange(); renderTableFromCache()"> Phase Errors
+            </label>
+        </div>
+    </div>
+
+    <div class="status-bar" id="statusBar">Connecting...</div>
+
+    <!-- Filters -->
+    <div id="filtersContainer" style="background-color: #252526; padding: 10px; margin-bottom: 20px; border-radius: 4px; border: 1px solid #3e3e42; display: none;">
+        <div style="margin-bottom: 8px;">
+            <strong style="color: #569cd6; margin-right: 10px;">Cabinets:</strong>
+            <span id="cabinetFilters"></span>
+        </div>
+        <div>
+            <strong style="color: #569cd6; margin-right: 10px;">Groups:</strong>
+            <span id="groupFilters"></span>
+        </div>
+    </div>
+
+    <div id="tableContainer" style="overflow-x: auto;">
+        <table id="metersTable">
+            <thead>
+                <tr id="tableHeader">
+                    <th>Machine</th>
+                    <th>Location</th>
+                    <th>Status</th>
+                    <!-- Dynamic headers will go here -->
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+                <!-- Rows will go here -->
+            </tbody>
+        </table>
+    </div>
+
+    <!-- File Selection Modal -->
+    <div id="fileModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeFileModal()">&times;</span>
+            <h2 style="color: #4ec9b0; margin-top: 0;">Select Configuration File</h2>
+            <p>Please select a file to start reading:</p>
+            <ul id="fileList" class="file-list">
+                <!-- Files will be populated here -->
+                <li>Loading...</li>
+            </ul>
+            <button class="btn-cancel" onclick="closeFileModal()">Cancel</button>
+        </div>
+    </div>
+
+    <!-- About Modal -->
+    <div id="aboutModal" class="modal">
+        <div class="modal-content about-content">
+            <span class="close-modal" onclick="closeAboutModal()">&times;</span>
+            <h2>About</h2>
+            <p><strong>Massimiliano Passeri</strong></p>
+            <p>Fonderie Mora Gavardo</p>
+            <br>
+            <p style="font-size: 0.9em; color: #888;">Energy Meters Web Datalogger v1.0</p>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const statusBar = document.getElementById('statusBar');
+        const tableHeader = document.getElementById('tableHeader');
+        const tableBody = document.getElementById('tableBody');
+        const fileModal = document.getElementById('fileModal');
+        const fileList = document.getElementById('fileList');
+        const aboutModal = document.getElementById('aboutModal');
+        const btnPause = document.getElementById('btnPause');
+        const filtersContainer = document.getElementById('filtersContainer');
+        const cabinetFiltersSpan = document.getElementById('cabinetFilters');
+        const groupFiltersSpan = document.getElementById('groupFilters');
+        
+        let currentRegisters = [];
+        let serverStartTime = null;
+        let lastAvailableFilters = null;
+        let lastData = null;
+
+        function renderTableFromCache() {
+            if (lastData) {
+                updateTable(lastData.utilities, lastData.registers, lastData.latestResults, lastData.config);
+            }
+        }
+
+        function showFileSelection() {
+            fileModal.style.display = "block";
+            fileList.innerHTML = '<li>Loading...</li>';
+            socket.emit('getFiles');
+        }
+
+        function closeFileModal() {
+            fileModal.style.display = "none";
+        }
+
+        function showAbout() {
+            aboutModal.style.display = "block";
+        }
+
+        function closeAboutModal() {
+            aboutModal.style.display = "none";
+        }
+
+        function togglePause() {
+            socket.emit('togglePause');
+        }
+
+        function renderFilters(available, active) {
+            // Check if options changed
+            const optionsChanged = !lastAvailableFilters || 
+                JSON.stringify(available) !== JSON.stringify(lastAvailableFilters);
+            
+            if (optionsChanged) {
+                lastAvailableFilters = available;
+                
+                // Render Cabinets
+                cabinetFiltersSpan.innerHTML = '';
+                available.cabinets.forEach(cab => {
+                    const label = document.createElement('label');
+                    label.style.marginRight = '15px';
+                    label.style.cursor = 'pointer';
+                    
+                    const cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    cb.value = cab;
+                    cb.dataset.type = 'cabinet';
+                    cb.onchange = handleFilterChange;
+                    
+                    label.appendChild(cb);
+                    label.appendChild(document.createTextNode(` Cab ${cab}`));
+                    cabinetFiltersSpan.appendChild(label);
+                });
+
+                // Render Groups
+                groupFiltersSpan.innerHTML = '';
+                available.groups.forEach(grp => {
+                    const label = document.createElement('label');
+                    label.style.marginRight = '15px';
+                    label.style.cursor = 'pointer';
+                    
+                    const cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    cb.value = grp;
+                    cb.dataset.type = 'group';
+                    cb.onchange = handleFilterChange;
+                    
+                    label.appendChild(cb);
+                    label.appendChild(document.createTextNode(` ${grp}`));
+                    groupFiltersSpan.appendChild(label);
+                });
+            }
+
+            // Update Checked State
+            const cabCheckboxes = cabinetFiltersSpan.querySelectorAll('input');
+            cabCheckboxes.forEach(cb => {
+                cb.checked = active.cabinets.some(c => String(c) === String(cb.value));
+            });
+
+            const grpCheckboxes = groupFiltersSpan.querySelectorAll('input');
+            grpCheckboxes.forEach(cb => {
+                cb.checked = active.groups.includes(cb.value);
+            });
+        }
+
+        function handleFilterChange() {
+            const selectedCabinets = Array.from(cabinetFiltersSpan.querySelectorAll('input:checked')).map(cb => cb.value);
+            const selectedGroups = Array.from(groupFiltersSpan.querySelectorAll('input:checked')).map(cb => cb.value);
+            
+            const currentFilterVal = document.querySelector('input[name="currentFilter"]:checked').value;
+            const filterErrors = document.getElementById('showErrors').checked;
+
+            socket.emit('updateFilters', {
+                cabinets: selectedCabinets,
+                groups: selectedGroups,
+                minCurrent: currentFilterVal,
+                onlyErrors: filterErrors
+            });
+        }
+
+        // Close modals when clicking outside
+        window.onclick = function(event) {
+            if (event.target == fileModal) {
+                fileModal.style.display = "none";
+            }
+            if (event.target == aboutModal) {
+                aboutModal.style.display = "none";
+            }
+        }
+
+        socket.on('connect', () => {
+            statusBar.textContent = 'Connected to server';
+            statusBar.style.color = '#4caf50';
+        });
+
+        socket.on('fileList', (files) => {
+            fileList.innerHTML = '';
+            if (files.length === 0) {
+                fileList.innerHTML = '<li style="cursor: default; color: #f44336;">No "Read_*.xlsx" files found.</li>';
+                // fileModal.style.display = "block"; // Don't auto-show error
+                return;
+            }
+
+            files.forEach(file => {
+                const li = document.createElement('li');
+                li.textContent = file.displayName;
+                li.onclick = () => {
+                    socket.emit('selectFile', file.filename);
+                    fileModal.style.display = "none";
+                    statusBar.textContent = `Loading ${file.displayName}...`;
+                };
+                fileList.appendChild(li);
+            });
+
+            // If we are not currently reading anything (table empty), show modal
+            // if (tableBody.children.length === 0) {
+            //    fileModal.style.display = "block";
+            // }
+        });
+
+        socket.on('disconnect', () => {
+            statusBar.textContent = 'Disconnected';
+            statusBar.style.color = '#f44336';
+        });
+
+        socket.on('update', (data) => {
+            lastData = data;
+            const { utilities, registers, latestResults, config, startTime, isPaused, availableFilters, activeFilters } = data;
+            
+            // Auto-reload page if server restarted (e.g. code change)
+            if (serverStartTime === null) {
+                serverStartTime = startTime;
+            } else if (serverStartTime !== startTime) {
+                window.location.reload();
+            }
+
+            // Update Filters UI
+            if (availableFilters) {
+                filtersContainer.style.display = 'block';
+                renderFilters(availableFilters, activeFilters);
+            }
+
+            // Update Pause Button
+            if (isPaused) {
+                btnPause.textContent = "Resume";
+                btnPause.classList.add('paused');
+                statusBar.textContent = `Paused | Last Update: ${new Date().toLocaleTimeString()}`;
+                statusBar.style.color = '#ffeb3b';
+            } else {
+                btnPause.textContent = "Pause";
+                btnPause.classList.remove('paused');
+                statusBar.textContent = `Connected | Interval: ${config.measurement_interval_ms}ms | Last Update: ${new Date().toLocaleTimeString()}`;
+                statusBar.style.color = '#9cdcfe';
+            }
+
+            // Update headers if registers changed
+
+            // Update headers if registers changed
+            if (JSON.stringify(registers.map(r => r.label)) !== JSON.stringify(currentRegisters.map(r => r.label))) {
+                currentRegisters = registers;
+                updateHeaders(registers);
+            }
+
+            updateTable(utilities, registers, latestResults, config);
+
+            // Render filters
+            renderFilters(availableFilters, activeFilters);
+        });
+
+        function updateHeaders(registers) {
+            // Clear existing headers except first 3
+            while (tableHeader.children.length > 3) {
+                tableHeader.removeChild(tableHeader.lastChild);
+            }
+            
+            registers.forEach(reg => {
+                const th = document.createElement('th');
+                th.textContent = reg.label;
+                tableHeader.appendChild(th);
+            });
+        }
+
+        function formatValue(val, label, config) {
+            let type = 'DEFAULT';
+            if (label.includes('V')) type = 'V';
+            else if (label.includes('A')) type = 'A';
+            else if (label.includes('PF')) type = 'PF';
+            else if (label === 'kW') type = 'kW';
+
+            const decimals = config[`decimals_${type}`] !== undefined ? config[`decimals_${type}`] : 2;
+            const integers = config[`integers_${type}`] !== undefined ? config[`integers_${type}`] : 0;
+            
+            let sign = val >= 0 ? ' ' : '-';
+            // if (type === 'PF') sign = val >= 0 ? '+' : '-';
+
+            let absVal = Math.abs(val).toFixed(decimals);
+            let parts = absVal.split('.');
+            let intPart = parts[0];
+            
+            if (integers > 0) {
+                intPart = intPart.padStart(integers, ' ');
+            }
+            
+            let decPart = parts[1] ? '.' + parts[1] : '';
+            
+            return `${sign}${intPart}${decPart}`;
+        }
+
+        function updateTable(utilities, registers, latestResults, config) {
+            tableBody.innerHTML = '';
+            let totalKw = 0;
+            
+            const currentFilterVal = document.querySelector('input[name="currentFilter"]:checked').value;
+            const filterErrors = document.getElementById('showErrors').checked;
+
+            utilities.forEach(util => {
+                const res = latestResults[util.id] || {};
+                
+                // Filter by Current
+                if (currentFilterVal !== 'all') {
+                    let threshold = 5;
+                    if (currentFilterVal === 'high20') threshold = 20;
+                    if (currentFilterVal === 'high40') threshold = 40;
+
+                    let hasHighCurrent = false;
+                    // Check if any current register has value >= threshold
+                    registers.forEach(reg => {
+                        if (reg.label.includes('A L') || reg.label.includes('Current')) { // A L1, A L2, A L3
+                            const val = res.values ? res.values[reg.startAddress] : 0;
+                            if (val >= threshold) hasHighCurrent = true;
+                        }
+                    });
+                    
+                    // If we have data (status OK) and no high current, skip
+                    if (!hasHighCurrent) return;
+                }
+
+                // Filter by Phase Errors
+                if (filterErrors) {
+                    let hasError = false;
+                    registers.forEach(reg => {
+                        const val = res.values ? res.values[reg.startAddress] : null;
+                        if (val !== null && val !== undefined) {
+                            // Check PF
+                            if (reg.label.includes('PF')) {
+                                const redMax = config.pf_red_max !== undefined ? config.pf_red_max : 0.4;
+                                if (val < redMax) hasError = true;
+                            }
+                            // Check Voltage
+                            else if (reg.label.includes('V')) {
+                                let min, max;
+                                if (reg.label.includes('L1-L2') || reg.label.includes('L2-L3') || reg.label.includes('L3-L1')) {
+                                    min = config.v_ll_min !== undefined ? config.v_ll_min : 380;
+                                    max = config.v_ll_max !== undefined ? config.v_ll_max : 420;
+                                } else if (reg.label.includes('L1-N') || reg.label.includes('L2-N') || reg.label.includes('L3-N')) {
+                                    min = config.v_ln_min !== undefined ? config.v_ln_min : 210;
+                                    max = config.v_ln_max !== undefined ? config.v_ln_max : 250;
+                                }
+                                if (min !== undefined && max !== undefined) {
+                                    if (val < min || val > max) hasError = true;
+                                }
+                            }
+                            // Check Negative (General)
+                            else if (val < 0) {
+                                hasError = true;
+                            }
+                        }
+                    });
+                    
+                    if (!hasError) return;
+                }
+
+                const tr = document.createElement('tr');
+                
+                // Machine
+                const tdName = document.createElement('td');
+                tdName.textContent = util.name;
+                tr.appendChild(tdName);
+
+                // Location
+                const tdLoc = document.createElement('td');
+                tdLoc.textContent = `C${util.cabinet} N${util.node}`;
+                tr.appendChild(tdLoc);
+
+                // Status
+                const status = res.status || 'PENDING';
+                const tdStatus = document.createElement('td');
+                
+                let icon = '?';
+                let className = 'status-pending';
+                
+                if (status === 'OK') { icon = '✔'; className = 'status-ok'; }
+                else if (status === 'READING') { icon = '↻'; className = 'status-reading'; }
+                else if (status === 'ERROR') { icon = '✖'; className = 'status-error'; }
+                
+                tdStatus.textContent = icon;
+                tdStatus.className = className;
+                if (status === 'ERROR' && res.error) {
+                    tdStatus.title = res.error;
+                }
+                tr.appendChild(tdStatus);
+
+                // Pre-calculate PF Alarm status for this row
+                let pfAlarm = false;
+                registers.forEach(reg => {
+                    if (reg.label.includes('PF')) {
+                        const val = res.values ? res.values[reg.startAddress] : null;
+                        if (val !== undefined && val !== null) {
+                            const redMax = config.pf_red_max !== undefined ? config.pf_red_max : 0.4;
+                            if (val < redMax) {
+                                pfAlarm = true;
+                            }
+                        }
+                    }
+                });
+
+                // Values
+                registers.forEach(reg => {
+                    const tdVal = document.createElement('td');
+                    tdVal.className = 'val-cell';
+                    tdVal.style.whiteSpace = 'pre'; // Preserve spaces for alignment
+                    
+                    const val = res.values ? res.values[reg.startAddress] : null;
+                    
+                    if (reg.label === 'kW' && val !== null && val !== undefined) {
+                        totalKw += val;
+                    }
+
+                    if (val !== null && val !== undefined) {
+                        tdVal.textContent = formatValue(val, reg.label, config);
+                        
+                        // Special coloring for PF
+                        if (reg.label.includes('PF')) {
+                            const redMax = config.pf_red_max !== undefined ? config.pf_red_max : 0.4;
+                            const yellowMax = config.pf_yellow_max !== undefined ? config.pf_yellow_max : 0.7;
+                            
+                            if (val < redMax) {
+                                tdVal.style.color = '#ff5555'; // Red
+                            } else if (val < yellowMax) {
+                                tdVal.style.color = '#ffeb3b'; // Yellow
+                            } else {
+                                tdVal.style.color = '#4caf50'; // Green
+                            }
+                        }
+                        // Special coloring for Voltages
+                        else if (reg.label.includes('V')) {
+                            let min, max;
+                            
+                            // Line-to-Line (L1-L2, etc)
+                            if (reg.label.includes('L1-L2') || reg.label.includes('L2-L3') || reg.label.includes('L3-L1')) {
+                                min = config.v_ll_min !== undefined ? config.v_ll_min : 380;
+                                max = config.v_ll_max !== undefined ? config.v_ll_max : 420;
+                            } 
+                            // Line-to-Neutral (L1-N, etc)
+                            else if (reg.label.includes('L1-N') || reg.label.includes('L2-N') || reg.label.includes('L3-N')) {
+                                min = config.v_ln_min !== undefined ? config.v_ln_min : 210;
+                                max = config.v_ln_max !== undefined ? config.v_ln_max : 250;
+                            }
+
+                            if (min !== undefined && max !== undefined) {
+                                if (val < min || val > max) {
+                                    tdVal.style.color = '#ff5555'; // Red if out of range
+                                }
+                            }
+                        }
+                        // Special coloring for kW if PF is bad
+                        else if (reg.label === 'kW' && pfAlarm) {
+                            tdVal.style.color = '#ff5555';
+                        }
+                        // Default negative check for others
+                        else if (val < 0) {
+                            tdVal.style.color = '#ff5555';
+                        }
+                    } else {
+                        tdVal.textContent = '-';
+                        tdVal.style.color = '#555';
+                    }
+                    tr.appendChild(tdVal);
+                });
+
+                tableBody.appendChild(tr);
+            });
+
+            // Append Total Row if enabled
+            if (document.getElementById('showTotalKw').checked) {
+                const tr = document.createElement('tr');
+                tr.style.fontWeight = 'bold';
+                tr.style.backgroundColor = '#333';
+                tr.style.borderTop = '2px solid #4ec9b0';
+                
+                const tdName = document.createElement('td');
+                tdName.textContent = 'TOTAL';
+                tdName.style.color = '#4ec9b0';
+                tr.appendChild(tdName);
+                
+                tr.appendChild(document.createElement('td')); // Location
+                tr.appendChild(document.createElement('td')); // Status
+                
+                registers.forEach(reg => {
+                    const td = document.createElement('td');
+                    td.className = 'val-cell';
+                    if (reg.label === 'kW') {
+                        td.textContent = formatValue(totalKw, 'kW', config);
+                        td.style.color = '#4ec9b0';
+                    }
+                    tr.appendChild(td);
+                });
+                tableBody.appendChild(tr);
+            }
+        }
+    </script>
+</body>
+</html>

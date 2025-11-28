@@ -1,0 +1,9 @@
+@echo off
+cd /d "%~dp0"
+echo Starting Energy Meters Server...
+start /min "Energy Meters Server" node web_datalogger.js
+echo Waiting for server to initialize...
+timeout /t 3 /nobreak >nul
+echo Opening Browser...
+start http://localhost:3000
+exit

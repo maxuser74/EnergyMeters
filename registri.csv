@@ -1,0 +1,15 @@
+Report,Registro,Type,Lettura,Title,Lenght,Readings,Convert to
+No,1,Number,Machine ID,"ID",unsigned short,"ID","ID"
+Yes,375,Currents,Current L1 (A),A L1,float,A,A
+Yes,377,Currents,Current L2 (A),A L2,float,A,A
+Yes,379,Currents,Current L3 (A),A L3,float,A,A
+Yes,367,Voltages,RMS line L1-L2 [V],V L1-L2,float,V,V
+Yes,369,Voltages,RMS line L2-L3 [V],V L2-L3,float,V,V
+Yes,371,Voltages,RMS line L3-L1 [V],V L3-L1,float,V,V
+Yes,359,Voltages,RMS star L1-N [V],V L1-N,float,V,V
+Yes,361,Voltages,RMS star L2-N [V],V L2-N,float,V,V
+Yes,363,Voltages,RMS star L3-N [V],V L3-N,float,V,V
+Yes,409,Power Factors,PF L1,PF1,float,N,N
+Yes,411,Power Factors,PF L2,PF2,float,N,N
+Yes,413,Power Factors,PF L3,PF3,float,N,N
+Yes,391,Power,Active Power W,W,float,N,N
