@@ -27,6 +27,9 @@
             --border: #1f2c38;
         }
         * { box-sizing: border-box; }
+        html, body {
+            height: 100%;
+        }
         body {
             margin: 0;
             padding: 0;
@@ -38,9 +41,21 @@
             min-height: 100vh;
         }
         .page {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 28px 20px 40px;
+            width: 100%;
+            max-width: none;
+            margin: 0;
+            padding: 16px 14px 22px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .content {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            flex: 1 1 auto;
+            min-height: 0;
         }
         .top-bar {
             display: flex;
@@ -78,6 +93,24 @@
             border-radius: 10px;
             min-width: 220px;
         }
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text);
+            text-decoration: none;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .back-link:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
         .status-main {
             font-weight: 600;
             font-size: 15px;
@@ -92,8 +125,10 @@
             border: 1px solid var(--border);
             border-radius: 14px;
             padding: 16px;
-            margin-bottom: 16px;
             box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+            flex: 1 1 38vh;
+            min-height: 200px;
+            overflow: auto;
         }
         .controls {
             display: grid;
@@ -148,11 +183,16 @@
             border-radius: 14px;
             padding: 16px;
             box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+            flex: 1 1 50vh;
+            min-height: 260px;
+            display: flex;
+            flex-direction: column;
         }
         #groupChart {
             width: 100%;
-            height: 280px;
-            max-height: 320px;
+            height: 55vh;
+            max-height: 70vh;
+            min-height: 260px;
             display: block;
         }
         .chart-head {
@@ -175,25 +215,17 @@
             grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
             gap: 12px;
         }
-        .footer-controls {
-            margin-top: 18px;
-            padding: 10px 0 0;
-            border-top: 1px solid var(--border);
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        .footer-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            align-items: center;
-        }
         .card {
             background: var(--card);
             border: 1px solid var(--border);
             border-radius: 12px;
             padding: 12px 14px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .card.inactive {
+            opacity: 0.5;
+            border-color: #2a3744;
         }
         .card h3 {
             margin: 0;
@@ -236,7 +268,12 @@
     <div class="page">
         <div class="top-bar">
             <div class="title-wrap">
-                <h1>Grafici gruppi: <span id="groupLabel">Compressori</span></h1>
+                <h1 style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                    Grafici gruppi:
+                    <span id="groupLabel">Compressori</span>
+                    <select id="groupSelect" style="background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; outline: none; min-width: 180px;"></select>
+                    <a class="back-link" href="/index.html">&#8592; Torna alla dashboard</a>
+                </h1>
             </div>
             <div class="status-box">
                 <div id="statusText" class="status-main">Connecting...</div>
@@ -244,39 +281,25 @@
             </div>
         </div>
 
-        <div class="chart-card">
-            <div class="chart-head">
-                <div>
-                    <div class="chart-title">Power consumption</div>
-                    <div class="chart-subtitle">kW over the last minutes</div>
+        <div class="content">
+            <div class="chart-card">
+                <div class="chart-head">
+                    <div>
+                        <div class="chart-title">Power consumption</div>
+                        <div class="chart-subtitle">kW over the last minutes</div>
+                    </div>
+                    <div class="chart-subtitle" id="sampleInfo"></div>
                 </div>
-                <div class="chart-subtitle" id="sampleInfo"></div>
+                <canvas id="groupChart"></canvas>
             </div>
-            <canvas id="groupChart" height="280"></canvas>
-        </div>
 
-        <div class="panel">
-            <div class="chart-head" style="margin-bottom: 12px;">
-                <div class="chart-title">Latest readings</div>
-                <div class="chart-subtitle">Live values from the selected group</div>
-            </div>
-            <div id="cards" class="cards"></div>
-            <div id="emptyState" class="empty" style="display:none;">No machines found for this group.</div>
-            <div class="footer-controls">
-                <div class="footer-row">
-                    <label for="groupSelect" style="color: var(--muted); font-size: 13px;">Group</label>
-                    <select id="groupSelect" style="flex: 1; min-width: 200px; max-width: 320px; background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; outline: none;"></select>
+            <div class="panel">
+                <div class="chart-head" style="margin-bottom: 12px;">
+                    <div class="chart-title">Latest readings</div>
+                    <div class="chart-subtitle">Live values from the selected group</div>
                 </div>
-                <div class="footer-row" style="align-items: flex-start;">
-                    <span style="color: var(--muted); font-size: 13px; padding-top: 6px;">Machines</span>
-                    <div id="machinePills" class="pill-wrap"></div>
-                </div>
-                <div class="footer-row">
-                    <label style="color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                        <input type="checkbox" id="stackToggle" style="accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer;">
-                        Add stacked total
-                    </label>
-                </div>
+                <div id="cards" class="cards"></div>
+                <div id="emptyState" class="empty" style="display:none;">No machines found for this group.</div>
             </div>
         </div>
     </div>
@@ -285,7 +308,8 @@
     <script>
         const DEFAULT_GROUP = 'Compressori';
         const MAX_POINTS = 480;
-        const CHART_HEIGHT = 280;
+        let CHART_HEIGHT = 280;
+        const TOTAL_STACK_ID = 'TOTAL_STACK';
         const palette = ['#7dd3fc', '#a78bfa', '#f472b6', '#facc15', '#34d399', '#60a5fa', '#f97316'];
         const gradientPairs = [
             ['#a5e3ff', '#2193ff'],
@@ -308,19 +332,17 @@
             history: {},
             selected: new Set(),
             chart: null,
-            showStackTotal: false
+            selectionInitialized: false
         };
 
         const els = {
             groupSelect: document.getElementById('groupSelect'),
-            machinePills: document.getElementById('machinePills'),
             groupLabel: document.getElementById('groupLabel'),
             statusText: document.getElementById('statusText'),
             statusMeta: document.getElementById('statusMeta'),
             cards: document.getElementById('cards'),
             empty: document.getElementById('emptyState'),
-            sampleInfo: document.getElementById('sampleInfo'),
-            stackToggle: document.getElementById('stackToggle')
+            sampleInfo: document.getElementById('sampleInfo')
         };
 
         function formatKw(value) {
@@ -371,8 +393,6 @@
         function buildChart() {
             if (state.chart || typeof Chart === 'undefined') return;
             const canvas = document.getElementById('groupChart');
-            canvas.height = CHART_HEIGHT;
-            canvas.style.height = CHART_HEIGHT + 'px';
             const ctx = canvas.getContext('2d');
             state.chart = new Chart(ctx, {
                 type: 'line',
@@ -402,6 +422,8 @@
 
         function renderChart() {
             if (!state.chart || !state.timeline.length) return;
+            // Keep canvas height aligned to layout
+            adjustChartHeight();
             const labels = state.timeline.map(ts => new Date(ts).toLocaleTimeString());
             const datasets = [];
             const ctx = state.chart.ctx || state.chart.canvas.getContext('2d');
@@ -431,12 +453,11 @@
                     fill: false
                 });
             });
-            if (state.showStackTotal && state.selected.size) {
+            if (state.selected.has(TOTAL_STACK_ID) && state.selected.size) {
                 const totalData = state.timeline.map((_, i) => {
                     let sum = 0;
                     let has = false;
                     state.utilities.forEach(u => {
-                        if (!state.selected.has(u.id)) return;
                         const val = (state.history[u.id] || [])[i];
                         if (val !== null && val !== undefined && !isNaN(val)) {
                             sum += val;
@@ -463,57 +484,64 @@
             state.chart.update();
         }
 
-        function renderPills(latestResults) {
-            els.machinePills.innerHTML = '';
-            if (!state.utilities.length) return;
-            state.utilities.forEach(util => {
-                const res = latestResults[util.id];
-                const val = res && res.values ? res.values[state.powerRegister?.startAddress] : null;
-                if (!state.selected.size) state.selected.add(util.id);
-                const pill = document.createElement('button');
-                pill.className = `pill ${state.selected.has(util.id) ? 'active' : ''}`;
-                pill.onclick = () => {
-                    if (state.selected.has(util.id)) {
-                        state.selected.delete(util.id);
-                    } else {
-                        state.selected.add(util.id);
-                    }
-                    renderPills(latestResults);
-                    renderChart();
-                };
-                pill.innerHTML = `${util.name}<small>${formatKw(val)}</small>`;
-                els.machinePills.appendChild(pill);
-            });
-        }
-
         function renderCards(latestResults) {
             els.cards.innerHTML = '';
             if (!state.utilities.length) {
-                els.empty.style.display = 'block';
-                return;
-            }
-            els.empty.style.display = 'none';
-            state.utilities.forEach(util => {
-                const res = latestResults[util.id];
-                const val = res && res.values ? res.values[state.powerRegister?.startAddress] : null;
+            els.empty.style.display = 'block';
+            return;
+        }
+        els.empty.style.display = 'none';
+        if (!state.selectionInitialized && state.selected.size === 0) {
+            state.utilities.forEach(u => state.selected.add(u.id));
+            state.selected.add(TOTAL_STACK_ID);
+            state.selectionInitialized = true;
+        }
+        const toggle = (id) => {
+            if (state.selected.has(id)) state.selected.delete(id);
+            else state.selected.add(id);
+            renderCards(latestResults);
+                renderChart();
+            };
+            const appendCard = (id, name, group, locationText, valueText) => {
                 const card = document.createElement('div');
                 card.className = 'card';
+                if (!state.selected.has(id)) card.classList.add('inactive');
+                card.onclick = () => toggle(id);
                 const title = document.createElement('h3');
-                title.textContent = util.name;
-                const badge = document.createElement('span');
-                badge.className = 'badge';
-                badge.textContent = util.group;
-                title.appendChild(badge);
+                title.textContent = name;
+                if (group) {
+                    const badge = document.createElement('span');
+                    badge.className = 'badge';
+                    badge.textContent = group;
+                    title.appendChild(badge);
+                }
                 const location = document.createElement('small');
-                location.textContent = `C${util.cabinet} - N${util.node}`;
+                location.textContent = locationText;
                 const value = document.createElement('div');
                 value.className = 'value';
-                value.textContent = formatKw(val);
+                value.textContent = valueText;
                 card.appendChild(title);
                 card.appendChild(location);
                 card.appendChild(value);
                 els.cards.appendChild(card);
+            };
+            state.utilities.forEach(util => {
+                const res = latestResults[util.id];
+                const val = res && res.values ? res.values[state.powerRegister?.startAddress] : null;
+                appendCard(util.id, util.name, util.group, `C${util.cabinet} - N${util.node}`, formatKw(val));
             });
+            // stacked total card
+            if (state.utilities.length) {
+                let total = null;
+                state.utilities.forEach(util => {
+                    const res = latestResults[util.id];
+                    const val = res && res.values ? res.values[state.powerRegister?.startAddress] : null;
+                    if (val !== null && val !== undefined && !isNaN(val)) {
+                        total = (total || 0) + val;
+                    }
+                });
+                appendCard(TOTAL_STACK_ID, 'Totale stack', null, 'Somma macchine visibili', formatKw(total));
+            }
         }
 
         function renderGroups(groups) {
@@ -533,16 +561,26 @@
             state.timeline = [];
             state.history = {};
             state.selected = new Set();
+            state.selectionInitialized = false;
             els.groupLabel.textContent = newGroup;
             requestGroupData();
         }
 
+        function adjustChartHeight() {
+            const canvas = document.getElementById('groupChart');
+            const card = canvas ? canvas.closest('.chart-card') : null;
+            if (!canvas || !card) return;
+            const header = card.querySelector('.chart-head');
+            const headerH = header ? header.offsetHeight : 50;
+            const available = card.clientHeight - headerH - 24; // padding/breathing
+            CHART_HEIGHT = Math.max(240, available);
+            canvas.height = CHART_HEIGHT;
+            canvas.style.height = CHART_HEIGHT + 'px';
+            if (state.chart) state.chart.resize();
+        }
+
         els.groupSelect.addEventListener('change', (e) => {
             setGroup(e.target.value);
-        });
-        els.stackToggle.addEventListener('change', (e) => {
-            state.showStackTotal = e.target.checked;
-            renderChart();
         });
 
         function requestGroupData() {
@@ -556,6 +594,7 @@
 
         socket.on('connect', () => {
             setStatus('Connected', 'waiting for data...');
+            adjustChartHeight();
             requestGroupData();
         });
         socket.on('disconnect', () => setStatus('Disconnected', 'trying to reconnect'));
@@ -582,22 +621,29 @@
             }
 
             // Keep selected set in sync
-            state.utilities.forEach(u => {
-                if (!state.selected.size) state.selected.add(u.id);
-            });
+            if (!state.selectionInitialized && !state.selected.size) {
+                state.utilities.forEach(u => state.selected.add(u.id));
+                state.selected.add(TOTAL_STACK_ID);
+                state.selectionInitialized = true;
+            }
             const ids = state.utilities.map(u => u.id);
             Array.from(state.selected).forEach(id => {
+                if (id === TOTAL_STACK_ID) return;
                 if (!ids.includes(id)) state.selected.delete(id);
             });
 
             pushDataForGroup(data.latestResults || {});
             buildChart();
-            renderPills(data.latestResults || {});
             renderCards(data.latestResults || {});
             renderChart();
 
             const lastUpdate = new Date().toLocaleTimeString();
             setStatus(`Live - ${state.group}`, `interval ${data.config?.measurement_interval_ms || 0} ms - updated ${lastUpdate}`);
+        });
+
+        window.addEventListener('resize', () => {
+            adjustChartHeight();
+            renderChart();
         });
     </script>
 </body>
