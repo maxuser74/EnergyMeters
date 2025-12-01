@@ -115,6 +115,16 @@ io.on('connection', (socket) => {
         broadcastUpdate();
         needsReload = true; // Trigger immediate restart of polling loop
     });
+
+    // Handle history request
+    socket.on('getHistory', (utilId) => {
+        if (history[utilId]) {
+            socket.emit('historyData', {
+                id: utilId,
+                data: history[utilId]
+            });
+        }
+    });
 });
 
 function getReadFiles() {
@@ -139,6 +149,8 @@ let config = {
 let utilities = [];
 let registers = [];
 let latestResults = {};
+let history = {}; // Store historical data for graphs
+const MAX_HISTORY_POINTS = 60; // Keep last 60 readings
 let isPaused = false;
 let availableFilters = { cabinets: [], groups: [] };
 let activeFilters = { cabinets: [], groups: ['Generali'], minCurrent: 'all', onlyErrors: false };
@@ -511,6 +523,20 @@ async function run() {
             
             // 3. Update results and notify clients
             latestResults[util.id] = result;
+            
+            // Update History
+            if (!history[util.id]) history[util.id] = [];
+            if (result.status === 'OK') {
+                history[util.id].push({
+                    timestamp: Date.now(),
+                    values: result.values
+                });
+                // Trim history
+                if (history[util.id].length > MAX_HISTORY_POINTS) {
+                    history[util.id].shift();
+                }
+            }
+
             broadcastUpdate();
         }
 

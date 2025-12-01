@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Energy Meters Logger</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
             background-color: #1e1e1e;
@@ -148,6 +149,67 @@
             font-size: 1.2em;
             margin: 10px 0;
         }
+
+        /* Detail Modal Styles */
+        .detail-modal-content {
+            background-color: #1e1e1e;
+            margin: 2% auto;
+            padding: 20px;
+            border: 1px solid #3e3e42;
+            width: 90%;
+            height: 90%;
+            color: #d4d4d4;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+
+        .badges-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+            justify-content: center;
+        }
+
+        .badge-card {
+            background-color: #2d2d30;
+            border: 1px solid #3e3e42;
+            border-radius: 5px;
+            padding: 10px;
+            min-width: 100px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .badge-title {
+            font-size: 0.8em;
+            color: #9cdcfe;
+            margin-bottom: 5px;
+        }
+
+        .badge-value {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #fff;
+        }
+
+        .charts-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+            flex: 1;
+        }
+
+        .chart-wrapper {
+            background-color: #252526;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #3e3e42;
+            min-height: 300px;
+        }
     </style>
 </head>
 <body>
@@ -237,6 +299,32 @@
         </div>
     </div>
 
+    <!-- Detail Modal -->
+    <div id="detailModal" class="modal">
+        <div class="modal-content detail-modal-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #3e3e42; padding-bottom: 10px;">
+                <h2 id="detailTitle" style="margin: 0; color: #4ec9b0;">Machine Details</h2>
+                <span class="close-modal" onclick="closeDetailModal()">&times;</span>
+            </div>
+            
+            <div id="detailBadges" class="badges-container">
+                <!-- Badges will be injected here -->
+            </div>
+
+            <div class="charts-container">
+                <div class="chart-wrapper">
+                    <canvas id="chartA"></canvas>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="chartV"></canvas>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="chartPF"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
@@ -250,11 +338,18 @@
         const filtersContainer = document.getElementById('filtersContainer');
         const cabinetFiltersSpan = document.getElementById('cabinetFilters');
         const groupFiltersSpan = document.getElementById('groupFilters');
+        const detailModal = document.getElementById('detailModal');
+        const detailTitle = document.getElementById('detailTitle');
+        const detailBadges = document.getElementById('detailBadges');
         
         let currentRegisters = [];
         let serverStartTime = null;
         let lastAvailableFilters = null;
         let lastData = null;
+        
+        // Detail View State
+        let currentDetailId = null;
+        let charts = { A: null, V: null, PF: null };
 
         function renderTableFromCache() {
             if (lastData) {
@@ -278,6 +373,170 @@
 
         function closeAboutModal() {
             aboutModal.style.display = "none";
+        }
+
+        function openDetail(utilId) {
+            currentDetailId = utilId;
+            const util = lastData.utilities.find(u => u.id === utilId);
+            if (util) {
+                detailTitle.textContent = `${util.name} (C${util.cabinet} N${util.node})`;
+            }
+            detailModal.style.display = "block";
+            
+            // Request history
+            socket.emit('getHistory', utilId);
+            
+            // Render current values immediately
+            if (lastData && lastData.latestResults[utilId]) {
+                updateDetailBadges(lastData.latestResults[utilId], lastData.registers, lastData.config);
+            }
+            
+            initCharts();
+        }
+
+        function closeDetailModal() {
+            detailModal.style.display = "none";
+            currentDetailId = null;
+        }
+
+        function initCharts() {
+            const commonOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                scales: {
+                    x: {
+                        ticks: { color: '#888' },
+                        grid: { color: '#333' }
+                    },
+                    y: {
+                        ticks: { color: '#888' },
+                        grid: { color: '#333' }
+                    }
+                },
+                plugins: {
+                    legend: { labels: { color: '#d4d4d4' } }
+                }
+            };
+
+            if (!charts.A) {
+                charts.A = new Chart(document.getElementById('chartA'), {
+                    type: 'line',
+                    data: { labels: [], datasets: [] },
+                    options: { ...commonOptions, plugins: { ...commonOptions.plugins, title: { display: true, text: 'Current (A)', color: '#d4d4d4' } } }
+                });
+            }
+            if (!charts.V) {
+                charts.V = new Chart(document.getElementById('chartV'), {
+                    type: 'line',
+                    data: { labels: [], datasets: [] },
+                    options: { ...commonOptions, plugins: { ...commonOptions.plugins, title: { display: true, text: 'Voltage (V)', color: '#d4d4d4' } } }
+                });
+            }
+            if (!charts.PF) {
+                charts.PF = new Chart(document.getElementById('chartPF'), {
+                    type: 'line',
+                    data: { labels: [], datasets: [] },
+                    options: { ...commonOptions, plugins: { ...commonOptions.plugins, title: { display: true, text: 'Power Factor', color: '#d4d4d4' } } }
+                });
+            }
+        }
+
+        function updateDetailBadges(result, registers, config) {
+            detailBadges.innerHTML = '';
+            if (!result || !result.values) return;
+
+            registers.forEach(reg => {
+                const val = result.values[reg.startAddress];
+                if (val !== undefined) {
+                    const card = document.createElement('div');
+                    card.className = 'badge-card';
+                    
+                    const title = document.createElement('div');
+                    title.className = 'badge-title';
+                    title.textContent = reg.label;
+                    
+                    const valueDiv = document.createElement('div');
+                    valueDiv.className = 'badge-value';
+                    valueDiv.textContent = formatValue(val, reg.label, config);
+                    
+                    // Color coding (reuse logic from table if possible, or simplified)
+                    if (reg.label.includes('PF') && val < (config.pf_red_max || 0.4)) valueDiv.style.color = '#ff5555';
+                    
+                    card.appendChild(title);
+                    card.appendChild(valueDiv);
+                    detailBadges.appendChild(card);
+                }
+            });
+        }
+
+        function updateCharts(historyData, registers) {
+            if (!historyData || historyData.length === 0) {
+                console.log("No history data to render");
+                return;
+            }
+            // console.log("Rendering charts with", historyData.length, "points");
+
+            const labels = historyData.map(h => new Date(h.timestamp).toLocaleTimeString());
+            
+            // Helper to create dataset
+            const createDataset = (label, color, data) => ({
+                label: label,
+                data: data,
+                borderColor: color,
+                borderWidth: 2,
+                pointRadius: 2, // Visible points
+                tension: 0.4,
+                spanGaps: true
+            });
+
+            // Prepare Data Arrays
+            const datasetsA = [];
+            const datasetsV = [];
+            const datasetsPF = [];
+
+            // Group registers by type
+            const regsA = registers.filter(r => r.label.includes('A L') || r.label.includes('Current'));
+            const regsV = registers.filter(r => r.label.includes('V'));
+            const regsPF = registers.filter(r => r.label.includes('PF'));
+
+            // Colors
+            const colors = ['#4ec9b0', '#ce9178', '#dcdcaa'];
+
+            // Populate A
+            regsA.forEach((reg, idx) => {
+                const data = historyData.map(h => h.values[reg.startAddress]);
+                datasetsA.push(createDataset(reg.label, colors[idx % colors.length], data));
+            });
+
+            // Populate V
+            regsV.forEach((reg, idx) => {
+                const data = historyData.map(h => h.values[reg.startAddress]);
+                datasetsV.push(createDataset(reg.label, colors[idx % colors.length], data));
+            });
+
+            // Populate PF
+            regsPF.forEach((reg, idx) => {
+                const data = historyData.map(h => h.values[reg.startAddress]);
+                datasetsPF.push(createDataset(reg.label, colors[idx % colors.length], data));
+            });
+
+            // Update Charts
+            if (charts.A) {
+                charts.A.data.labels = labels;
+                charts.A.data.datasets = datasetsA;
+                charts.A.update();
+            }
+            if (charts.V) {
+                charts.V.data.labels = labels;
+                charts.V.data.datasets = datasetsV;
+                charts.V.update();
+            }
+            if (charts.PF) {
+                charts.PF.data.labels = labels;
+                charts.PF.data.datasets = datasetsPF;
+                charts.PF.update();
+            }
         }
 
         function togglePause() {
@@ -364,6 +623,9 @@
             if (event.target == aboutModal) {
                 aboutModal.style.display = "none";
             }
+            if (event.target == detailModal) {
+                closeDetailModal();
+            }
         }
 
         socket.on('connect', () => {
@@ -394,6 +656,12 @@
             // if (tableBody.children.length === 0) {
             //    fileModal.style.display = "block";
             // }
+        });
+
+        socket.on('historyData', (msg) => {
+            if (currentDetailId === msg.id) {
+                updateCharts(msg.data, lastData.registers);
+            }
         });
 
         socket.on('disconnect', () => {
@@ -443,6 +711,16 @@
 
             // Render filters
             renderFilters(availableFilters, activeFilters);
+
+            // Update Detail View if open
+            if (currentDetailId && latestResults[currentDetailId]) {
+                updateDetailBadges(latestResults[currentDetailId], registers, config);
+                // We also need to update the chart with the new point.
+                // Ideally, we should append the new point to the chart data instead of re-fetching history.
+                // But for simplicity, we can just re-request history or let the next history fetch handle it.
+                // Actually, let's just request history again to keep it synced easily.
+                socket.emit('getHistory', currentDetailId);
+            }
         });
 
         function updateHeaders(registers) {
@@ -549,6 +827,8 @@
                 }
 
                 const tr = document.createElement('tr');
+                tr.style.cursor = 'pointer';
+                tr.onclick = () => openDetail(util.id);
                 
                 // Machine
                 const tdName = document.createElement('td');
