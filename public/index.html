@@ -4,7 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Energy Meters Logger</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/vendor/chart.umd.js"></script>
+    <script>
+        // Fallback to CDN only if local vendor copy is not available
+        if (typeof Chart === 'undefined') {
+            const fallback = document.createElement('script');
+            fallback.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+            document.head.appendChild(fallback);
+        }
+    </script>
     <style>
         body {
             background-color: #1e1e1e;
@@ -373,6 +381,8 @@
         const detailTitle = document.getElementById('detailTitle');
         const detailBadges = document.getElementById('detailBadges');
         
+        const clientHistory = {};
+        const MAX_CLIENT_HISTORY = 120;
         let currentRegisters = [];
         let serverStartTime = null;
         let lastAvailableFilters = null;
@@ -423,6 +433,9 @@
             }
             
             initCharts();
+            if (clientHistory[utilId] && clientHistory[utilId].length && lastData) {
+                updateCharts(clientHistory[utilId], lastData.registers);
+            }
         }
 
         function closeDetailModal() {
@@ -431,6 +444,11 @@
         }
 
         function initCharts() {
+            if (typeof Chart === 'undefined') {
+                console.error('Chart.js not loaded; charts cannot be rendered.');
+                return;
+            }
+
             const commonOptions = {
                 responsive: true,
                 maintainAspectRatio: false,
@@ -605,7 +623,23 @@
             }
         }
 
+        function pushClientHistory(utilId, result) {
+            if (!result || result.status !== 'OK' || !result.values) return;
+            if (!clientHistory[utilId]) clientHistory[utilId] = [];
+            clientHistory[utilId].push({
+                timestamp: Date.now(),
+                values: result.values
+            });
+            if (clientHistory[utilId].length > MAX_CLIENT_HISTORY) {
+                clientHistory[utilId].shift();
+            }
+        }
+
         function updateCharts(historyData, registers) {
+            if (!Array.isArray(registers) || registers.length === 0) {
+                console.warn("No registers available for charting.");
+                return;
+            }
             if (!historyData || historyData.length === 0) {
                 console.warn("No history data available.");
                 return;
@@ -812,8 +846,12 @@
         });
 
         socket.on('historyData', (msg) => {
-            if (currentDetailId === msg.id) {
-                updateCharts(msg.data, lastData.registers);
+            if (!msg || !msg.id) return;
+            if (Array.isArray(msg.data)) {
+                clientHistory[msg.id] = msg.data.slice(-MAX_CLIENT_HISTORY);
+            }
+            if (currentDetailId === msg.id && lastData) {
+                updateCharts(clientHistory[msg.id] || msg.data, lastData.registers);
             }
         });
 
@@ -862,17 +900,23 @@
 
             updateTable(utilities, registers, latestResults, config);
 
+            // Keep a lightweight client-side history so charts have data even if the server history is momentarily unavailable
+            utilities.forEach(util => {
+                pushClientHistory(util.id, latestResults[util.id]);
+            });
+
             // Render filters
             renderFilters(availableFilters, activeFilters);
 
             // Update Detail View if open
             if (currentDetailId && latestResults[currentDetailId]) {
                 updateDetailBadges(latestResults[currentDetailId], registers, config);
-                // We also need to update the chart with the new point.
-                // Ideally, we should append the new point to the chart data instead of re-fetching history.
-                // But for simplicity, we can just re-request history or let the next history fetch handle it.
-                // Actually, let's just request history again to keep it synced easily.
-                socket.emit('getHistory', currentDetailId);
+                const localHistory = clientHistory[currentDetailId];
+                if (localHistory && localHistory.length) {
+                    updateCharts(localHistory, registers);
+                } else {
+                    socket.emit('getHistory', currentDetailId);
+                }
             }
         });
 

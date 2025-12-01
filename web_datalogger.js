@@ -73,6 +73,8 @@ const io = new Server(server);
 
 // Serve static files from the 'public' directory (index.html, css, etc.)
 app.use(express.static(path.join(__dirname, 'public')));
+// Expose local vendor assets (Chart.js) to avoid CDN dependency in offline networks
+app.use('/vendor', express.static(path.join(__dirname, 'node_modules', 'chart.js', 'dist')));
 
 // Socket.IO Connection Handling
 io.on('connection', (socket) => {
