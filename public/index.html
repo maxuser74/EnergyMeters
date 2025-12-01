@@ -350,10 +350,7 @@
                     <canvas id="chartA"></canvas>
                 </div>
                 <div class="chart-wrapper">
-                    <canvas id="chartV"></canvas>
-                </div>
-                <div class="chart-wrapper">
-                    <canvas id="chartPF"></canvas>
+                    <canvas id="chartkW"></canvas>
                 </div>
             </div>
         </div>
@@ -383,7 +380,7 @@
         
         // Detail View State
         let currentDetailId = null;
-        let charts = { A: null, V: null, PF: null };
+        let charts = { A: null, kW: null };
 
         function renderTableFromCache() {
             if (lastData) {
@@ -460,18 +457,11 @@
                     options: { ...commonOptions, plugins: { ...commonOptions.plugins, title: { display: true, text: 'Current (A)', color: '#d4d4d4' } } }
                 });
             }
-            if (!charts.V) {
-                charts.V = new Chart(document.getElementById('chartV'), {
+            if (!charts.kW) {
+                charts.kW = new Chart(document.getElementById('chartkW'), {
                     type: 'line',
                     data: { labels: [], datasets: [] },
-                    options: { ...commonOptions, plugins: { ...commonOptions.plugins, title: { display: true, text: 'Voltage (V)', color: '#d4d4d4' } } }
-                });
-            }
-            if (!charts.PF) {
-                charts.PF = new Chart(document.getElementById('chartPF'), {
-                    type: 'line',
-                    data: { labels: [], datasets: [] },
-                    options: { ...commonOptions, plugins: { ...commonOptions.plugins, title: { display: true, text: 'Power Factor', color: '#d4d4d4' } } }
+                    options: { ...commonOptions, plugins: { ...commonOptions.plugins, title: { display: true, text: 'Power (kW)', color: '#d4d4d4' } } }
                 });
             }
         }
@@ -614,33 +604,33 @@
 
             // Prepare Data Arrays
             const datasetsA = [];
-            const datasetsV = [];
-            const datasetsPF = [];
+            const datasetskW = [];
 
             // Group registers by type
             const regsA = registers.filter(r => r.label.includes('A L') || r.label.includes('Current'));
-            const regsV = registers.filter(r => r.label.includes('V'));
-            const regsPF = registers.filter(r => r.label.includes('PF'));
+            const regskW = registers.filter(r => r.label === 'kW' || r.label === 'W' || r.label === 'Active Power W');
 
             // Colors
             const colors = ['#4ec9b0', '#ce9178', '#dcdcaa'];
 
             // Populate A
             regsA.forEach((reg, idx) => {
-                const data = historyData.map(h => h.values[reg.startAddress]);
+                const data = historyData.map(h => {
+                    if (!h.values) return null;
+                    const val = h.values[reg.startAddress];
+                    return (val !== undefined && val !== null) ? val : null;
+                });
                 datasetsA.push(createDataset(reg.label, colors[idx % colors.length], data));
             });
 
-            // Populate V
-            regsV.forEach((reg, idx) => {
-                const data = historyData.map(h => h.values[reg.startAddress]);
-                datasetsV.push(createDataset(reg.label, colors[idx % colors.length], data));
-            });
-
-            // Populate PF
-            regsPF.forEach((reg, idx) => {
-                const data = historyData.map(h => h.values[reg.startAddress]);
-                datasetsPF.push(createDataset(reg.label, colors[idx % colors.length], data));
+            // Populate kW
+            regskW.forEach((reg, idx) => {
+                const data = historyData.map(h => {
+                    if (!h.values) return null;
+                    const val = h.values[reg.startAddress];
+                    return (val !== undefined && val !== null) ? val : null;
+                });
+                datasetskW.push(createDataset(reg.label, '#569cd6', data));
             });
 
             // Update Charts
@@ -649,15 +639,10 @@
                 charts.A.data.datasets = datasetsA;
                 charts.A.update();
             }
-            if (charts.V) {
-                charts.V.data.labels = labels;
-                charts.V.data.datasets = datasetsV;
-                charts.V.update();
-            }
-            if (charts.PF) {
-                charts.PF.data.labels = labels;
-                charts.PF.data.datasets = datasetsPF;
-                charts.PF.update();
+            if (charts.kW) {
+                charts.kW.data.labels = labels;
+                charts.kW.data.datasets = datasetskW;
+                charts.kW.update();
             }
         }
 
