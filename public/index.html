@@ -199,6 +199,7 @@
             <thead>
                 <tr id="tableHeader">
                     <th>Machine</th>
+                    <th>Group</th>
                     <th>Location</th>
                     <th>Status</th>
                     <!-- Dynamic headers will go here -->
@@ -445,8 +446,8 @@
         });
 
         function updateHeaders(registers) {
-            // Clear existing headers except first 3
-            while (tableHeader.children.length > 3) {
+            // Clear existing headers except first 4
+            while (tableHeader.children.length > 4) {
                 tableHeader.removeChild(tableHeader.lastChild);
             }
             
@@ -553,6 +554,11 @@
                 const tdName = document.createElement('td');
                 tdName.textContent = util.name;
                 tr.appendChild(tdName);
+
+                // Group
+                const tdGroup = document.createElement('td');
+                tdGroup.textContent = util.group;
+                tr.appendChild(tdGroup);
 
                 // Location
                 const tdLoc = document.createElement('td');
@@ -670,6 +676,7 @@
                 tdName.style.color = '#4ec9b0';
                 tr.appendChild(tdName);
                 
+                tr.appendChild(document.createElement('td')); // Group
                 tr.appendChild(document.createElement('td')); // Location
                 tr.appendChild(document.createElement('td')); // Status
                 
