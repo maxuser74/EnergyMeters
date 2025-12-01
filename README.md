@@ -14,6 +14,7 @@ A Node.js application for reading energy meter data via Modbus TCP. This project
     *   **Active Power (kW)**: Turns Red if the Power Factor for that meter is critical.
 *   **Auto-Reload**: The web server automatically restarts when code or configuration changes.
 *   **Custom Formatting**: Supports configurable decimal places and integer padding for Voltage (V), Current (A), Power Factor (PF), and Power (kW).
+*   **Detail View & Charts**: Click a table row to open a per-meter modal with badges and history charts for currents and power (Chart.js served locally with CDN fallback).
 
 ## Prerequisites
 
@@ -60,6 +61,14 @@ To start the web server with auto-reload enabled:
 
 *   Open your browser to **[http://localhost:3000](http://localhost:3000)**.
 *   To use a specific utilities file: `.\run_node_web.ps1 --utilities .\MyFile.xlsx`
+
+### Detail View & Charts
+
+*   Click any meter row to open the detail modal.
+*   You will see live badges plus two history charts: currents (A) and power (kW).
+*   The power chart starts at 0 on the Y axis to make trends clear, and points are small to reduce clutter.
+*   Chart.js is served locally from `/vendor/chart.umd.js` with a CDN fallback if needed.
+*   Up to 120 recent points per meter are buffered client-side so the graph stays populated while streaming.
 
 ## Project Structure
 
