@@ -607,10 +607,15 @@
 
         function updateCharts(historyData, registers) {
             if (!historyData || historyData.length === 0) {
-                console.log("No history data to render");
+                console.warn("No history data available.");
                 return;
             }
-            // console.log("Rendering charts with", historyData.length, "points");
+
+            // Debug: Check first point structure
+            const firstPoint = historyData[0];
+            if (firstPoint && firstPoint.values) {
+                console.log("First history point keys:", Object.keys(firstPoint.values));
+            }
 
             const labels = historyData.map(h => new Date(h.timestamp).toLocaleTimeString());
             
@@ -621,11 +626,11 @@
                 borderColor: color,
                 backgroundColor: color,
                 borderWidth: 2,
-                pointRadius: 4, // Larger, visible points
+                pointRadius: 4,
                 pointHoverRadius: 6,
                 pointBackgroundColor: color,
                 fill: false,
-                tension: 0.4, // Smooth curves
+                tension: 0.4,
                 spanGaps: true
             });
 
@@ -640,35 +645,41 @@
             // Colors
             const colors = ['#4ec9b0', '#ce9178', '#dcdcaa'];
 
+            // Helper to safely extract value
+            const getValue = (h, reg) => {
+                if (!h.values) return null;
+                
+                // 1. Try direct access (number or string)
+                let val = h.values[reg.startAddress];
+                if (val === undefined) val = h.values[String(reg.startAddress)];
+                
+                // 2. Try finding key loosely
+                if (val === undefined) {
+                    const key = Object.keys(h.values).find(k => k == reg.startAddress);
+                    if (key) val = h.values[key];
+                }
+
+                return (val !== undefined && val !== null) ? parseFloat(val) : null;
+            };
+
             // Populate A
             regsA.forEach((reg, idx) => {
-                const data = historyData.map(h => {
-                    if (!h.values) return null;
-                    // Try both number and string keys
-                    let val = h.values[reg.startAddress];
-                    if (val === undefined) val = h.values[String(reg.startAddress)];
-                    
-                    return (val !== undefined && val !== null) ? parseFloat(val) : null;
-                });
-                // console.log(`Data for ${reg.label}:`, data);
+                const data = historyData.map(h => getValue(h, reg));
+                // console.log(`Data for ${reg.label} (${reg.startAddress}):`, data);
                 datasetsA.push(createDataset(reg.label, colors[idx % colors.length], data));
             });
 
             // Populate kW
             regskW.forEach((reg, idx) => {
-                const data = historyData.map(h => {
-                    if (!h.values) return null;
-                    // Try both number and string keys
-                    let val = h.values[reg.startAddress];
-                    if (val === undefined) val = h.values[String(reg.startAddress)];
-
-                    return (val !== undefined && val !== null) ? parseFloat(val) : null;
-                });
-                // console.log(`Data for ${reg.label}:`, data);
+                const data = historyData.map(h => getValue(h, reg));
+                // console.log(`Data for ${reg.label} (${reg.startAddress}):`, data);
                 datasetskW.push(createDataset(reg.label, '#569cd6', data));
             });
 
-            // Update Charts
+            // Update Charts - Destroy and Recreate to ensure clean state if needed, 
+            // or just update data if instance exists. 
+            // For robustness, we'll update data.
+            
             if (charts.A) {
                 charts.A.data.labels = labels;
                 charts.A.data.datasets = datasetsA;
