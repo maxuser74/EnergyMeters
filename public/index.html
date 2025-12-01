@@ -435,18 +435,41 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 animation: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
                 scales: {
                     x: {
-                        ticks: { color: '#888' },
+                        type: 'category',
+                        display: true,
+                        title: {
+                            display: true,
+                            text: 'Time',
+                            color: '#888'
+                        },
+                        ticks: { 
+                            color: '#d4d4d4',
+                            maxRotation: 0,
+                            autoSkip: true,
+                            maxTicksLimit: 10
+                        },
                         grid: { color: '#333' }
                     },
                     y: {
-                        ticks: { color: '#888' },
+                        display: true,
+                        beginAtZero: false, // Adapt to readings
+                        grace: '5%', // Add some padding
+                        ticks: { color: '#d4d4d4' },
                         grid: { color: '#333' }
                     }
                 },
                 plugins: {
-                    legend: { labels: { color: '#d4d4d4' } }
+                    legend: { labels: { color: '#d4d4d4' } },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false
+                    }
                 }
             };
 
@@ -596,9 +619,13 @@
                 label: label,
                 data: data,
                 borderColor: color,
+                backgroundColor: color,
                 borderWidth: 2,
-                pointRadius: 2, // Visible points
-                tension: 0.4,
+                pointRadius: 4, // Larger, visible points
+                pointHoverRadius: 6,
+                pointBackgroundColor: color,
+                fill: false,
+                tension: 0.4, // Smooth curves
                 spanGaps: true
             });
 
@@ -617,9 +644,13 @@
             regsA.forEach((reg, idx) => {
                 const data = historyData.map(h => {
                     if (!h.values) return null;
-                    const val = h.values[reg.startAddress];
-                    return (val !== undefined && val !== null) ? val : null;
+                    // Try both number and string keys
+                    let val = h.values[reg.startAddress];
+                    if (val === undefined) val = h.values[String(reg.startAddress)];
+                    
+                    return (val !== undefined && val !== null) ? parseFloat(val) : null;
                 });
+                // console.log(`Data for ${reg.label}:`, data);
                 datasetsA.push(createDataset(reg.label, colors[idx % colors.length], data));
             });
 
@@ -627,9 +658,13 @@
             regskW.forEach((reg, idx) => {
                 const data = historyData.map(h => {
                     if (!h.values) return null;
-                    const val = h.values[reg.startAddress];
-                    return (val !== undefined && val !== null) ? val : null;
+                    // Try both number and string keys
+                    let val = h.values[reg.startAddress];
+                    if (val === undefined) val = h.values[String(reg.startAddress)];
+
+                    return (val !== undefined && val !== null) ? parseFloat(val) : null;
                 });
+                // console.log(`Data for ${reg.label}:`, data);
                 datasetskW.push(createDataset(reg.label, '#569cd6', data));
             });
 
