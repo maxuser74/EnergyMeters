@@ -168,9 +168,37 @@
 
         .badges-container {
             display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .badges-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            width: 100%;
+        }
+
+        .badge-group {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .badge-group-title {
+            font-size: 0.85em;
+            color: #888;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            border-bottom: 1px solid #3e3e42;
+            padding-bottom: 4px;
+            padding-left: 5px;
+        }
+
+        .badge-group-items {
+            display: flex;
             flex-wrap: wrap;
             gap: 10px;
-            margin-bottom: 20px;
             justify-content: center;
         }
 
@@ -183,6 +211,12 @@
             text-align: center;
             box-shadow: 0 2px 4px rgba(0,0,0,0.2);
         }
+
+        .badge-card.type-A { border-top: 3px solid #4ec9b0; }
+        .badge-card.type-V-LN { border-top: 3px solid #ce9178; }
+        .badge-card.type-V-LL { border-top: 3px solid #c586c0; }
+        .badge-card.type-PF { border-top: 3px solid #dcdcaa; }
+        .badge-card.type-kW { border-top: 3px solid #569cd6; }
 
         .badge-title {
             font-size: 0.8em;
@@ -446,28 +480,116 @@
             detailBadges.innerHTML = '';
             if (!result || !result.values) return;
 
-            registers.forEach(reg => {
-                const val = result.values[reg.startAddress];
-                if (val !== undefined) {
-                    const card = document.createElement('div');
-                    card.className = 'badge-card';
+            // Define Groups with Row assignment
+            const groups = [
+                { id: 'current', title: 'Currents', check: r => r.label.includes('A L') || r.label.includes('Current'), row: 1 },
+                { id: 'v_star', title: 'Voltages (L-N)', check: r => r.label.includes('L1-N') || r.label.includes('L2-N') || r.label.includes('L3-N'), row: 1 },
+                { id: 'v_triangle', title: 'Voltages (L-L)', check: r => r.label.includes('L1-L2') || r.label.includes('L2-L3') || r.label.includes('L3-L1'), row: 1 },
+                { id: 'pf', title: 'Power Factors', check: r => r.label.includes('PF'), row: 2 },
+                { id: 'power', title: 'Power', check: r => r.label === 'kW' || r.label === 'W' || r.label === 'Active Power W', row: 2 }
+            ];
+
+            // Helper to create badge
+            const createBadge = (reg, val) => {
+                const card = document.createElement('div');
+                card.className = 'badge-card';
+                
+                // Determine type for coloring
+                if (reg.label.includes('A L') || reg.label.includes('Current')) card.classList.add('type-A');
+                else if (reg.label.includes('L1-N') || reg.label.includes('L2-N') || reg.label.includes('L3-N')) card.classList.add('type-V-LN');
+                else if (reg.label.includes('L1-L2') || reg.label.includes('L2-L3') || reg.label.includes('L3-L1')) card.classList.add('type-V-LL');
+                else if (reg.label.includes('PF')) card.classList.add('type-PF');
+                else if (reg.label === 'kW') card.classList.add('type-kW');
+
+                const title = document.createElement('div');
+                title.className = 'badge-title';
+                title.textContent = reg.label;
+                
+                const valueDiv = document.createElement('div');
+                valueDiv.className = 'badge-value';
+                valueDiv.textContent = formatValue(val, reg.label, config);
+                
+                // Color coding for values (red if alarm)
+                if (reg.label.includes('PF') && val < (config.pf_red_max || 0.4)) valueDiv.style.color = '#ff5555';
+                
+                card.appendChild(title);
+                card.appendChild(valueDiv);
+                return card;
+            };
+
+            // Create Row Containers
+            const row1 = document.createElement('div');
+            row1.className = 'badges-row';
+            const row2 = document.createElement('div');
+            row2.className = 'badges-row';
+
+            const usedRegisters = new Set();
+
+            groups.forEach(group => {
+                const groupRegs = registers.filter(r => group.check(r));
+                if (groupRegs.length > 0) {
+                    const groupDiv = document.createElement('div');
+                    groupDiv.className = 'badge-group';
                     
-                    const title = document.createElement('div');
-                    title.className = 'badge-title';
-                    title.textContent = reg.label;
-                    
-                    const valueDiv = document.createElement('div');
-                    valueDiv.className = 'badge-value';
-                    valueDiv.textContent = formatValue(val, reg.label, config);
-                    
-                    // Color coding (reuse logic from table if possible, or simplified)
-                    if (reg.label.includes('PF') && val < (config.pf_red_max || 0.4)) valueDiv.style.color = '#ff5555';
-                    
-                    card.appendChild(title);
-                    card.appendChild(valueDiv);
-                    detailBadges.appendChild(card);
+                    const titleDiv = document.createElement('div');
+                    titleDiv.className = 'badge-group-title';
+                    titleDiv.textContent = group.title;
+                    groupDiv.appendChild(titleDiv);
+
+                    const itemsDiv = document.createElement('div');
+                    itemsDiv.className = 'badge-group-items';
+
+                    groupRegs.forEach(reg => {
+                        const val = result.values[reg.startAddress];
+                        if (val !== undefined) {
+                            itemsDiv.appendChild(createBadge(reg, val));
+                            usedRegisters.add(reg);
+                        }
+                    });
+
+                    if (itemsDiv.children.length > 0) {
+                        groupDiv.appendChild(itemsDiv);
+                        // Append to correct row
+                        if (group.row === 1) row1.appendChild(groupDiv);
+                        else row2.appendChild(groupDiv);
+                    }
                 }
             });
+
+            // Append rows if they have children
+            if (row1.children.length > 0) detailBadges.appendChild(row1);
+            if (row2.children.length > 0) detailBadges.appendChild(row2);
+
+            // Render Others
+            const otherRegs = registers.filter(r => !usedRegisters.has(r));
+            if (otherRegs.length > 0) {
+                const rowOther = document.createElement('div');
+                rowOther.className = 'badges-row';
+
+                const groupDiv = document.createElement('div');
+                groupDiv.className = 'badge-group';
+                
+                const titleDiv = document.createElement('div');
+                titleDiv.className = 'badge-group-title';
+                titleDiv.textContent = 'Other';
+                groupDiv.appendChild(titleDiv);
+
+                const itemsDiv = document.createElement('div');
+                itemsDiv.className = 'badge-group-items';
+
+                otherRegs.forEach(reg => {
+                    const val = result.values[reg.startAddress];
+                    if (val !== undefined) {
+                        itemsDiv.appendChild(createBadge(reg, val));
+                    }
+                });
+
+                if (itemsDiv.children.length > 0) {
+                    groupDiv.appendChild(itemsDiv);
+                    rowOther.appendChild(groupDiv);
+                    detailBadges.appendChild(rowOther);
+                }
+            }
         }
 
         function updateCharts(historyData, registers) {
