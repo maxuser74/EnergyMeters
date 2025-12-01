@@ -502,7 +502,18 @@
                 charts.kW = new Chart(document.getElementById('chartkW'), {
                     type: 'line',
                     data: { labels: [], datasets: [] },
-                    options: { ...commonOptions, plugins: { ...commonOptions.plugins, title: { display: true, text: 'Power (kW)', color: '#d4d4d4' } } }
+                    options: { 
+                        ...commonOptions, 
+                        scales: { 
+                            ...commonOptions.scales, 
+                            y: { 
+                                ...commonOptions.scales.y, 
+                                beginAtZero: true, 
+                                min: 0 
+                            } 
+                        },
+                        plugins: { ...commonOptions.plugins, title: { display: true, text: 'Power (kW)', color: '#d4d4d4' } } 
+                    }
                 });
             }
         }
@@ -660,8 +671,8 @@
                 borderColor: color,
                 backgroundColor: color,
                 borderWidth: 2,
-                pointRadius: 4,
-                pointHoverRadius: 6,
+                pointRadius: 2,
+                pointHoverRadius: 4,
                 pointBackgroundColor: color,
                 fill: false,
                 tension: 0.4,
