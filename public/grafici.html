@@ -246,8 +246,9 @@
             padding: 2px 8px;
             border-radius: 999px;
             font-size: 11px;
-            background: rgba(125, 211, 252, 0.14);
+            background: rgba(125, 211, 252, 0.08);
             color: var(--accent);
+            border: 1px solid var(--accent);
             margin-left: 6px;
         }
         .empty {
@@ -321,6 +322,32 @@
             ['#ffb38a', '#ea580c'],
             ['#c7f9cc', '#16a34a'] // total stack line
         ];
+        const TOTAL_COLOR_INDEX = gradientPairs.length - 1;
+
+        function hexToRgba(hex, alpha) {
+            if (!hex || typeof hex !== 'string') return '';
+            const h = hex.replace('#', '');
+            if (h.length !== 6) return '';
+            const num = parseInt(h, 16);
+            const r = (num >> 16) & 255;
+            const g = (num >> 8) & 255;
+            const b = num & 255;
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        }
+
+        function getLineSolidColor(idx) {
+            const pair = gradientPairs[idx % gradientPairs.length];
+            return pair[1] || pair[0];
+        }
+
+        function getLineGradient(idx, ctx, height) {
+            if (!ctx) return getLineSolidColor(idx);
+            const g = ctx.createLinearGradient(0, 0, 0, height);
+            const pair = gradientPairs[idx % gradientPairs.length];
+            g.addColorStop(0, pair[0]);
+            g.addColorStop(1, pair[1] || pair[0]);
+            return g;
+        }
 
         const socket = io();
         const state = {
@@ -429,18 +456,10 @@
             const ctx = state.chart.ctx || state.chart.canvas.getContext('2d');
             const chartArea = state.chart.chartArea;
             const gradientHeight = chartArea ? chartArea.bottom - chartArea.top : (state.chart.canvas?.height || 300);
-            const getGradient = (idx) => {
-                if (!ctx) return palette[idx % palette.length];
-                const g = ctx.createLinearGradient(0, 0, 0, gradientHeight);
-                const pair = gradientPairs[idx % gradientPairs.length];
-                g.addColorStop(0, pair[0]);
-                g.addColorStop(1, pair[1]);
-                return g;
-            };
             state.utilities.forEach((util, idx) => {
                 if (!state.selected.has(util.id)) return;
                 const data = state.history[util.id] || [];
-                const gradient = getGradient(idx);
+                const gradient = getLineGradient(idx, ctx, gradientHeight);
                 datasets.push({
                     label: util.name,
                     data,
@@ -466,7 +485,7 @@
                     });
                     return has ? sum : null;
                 });
-                const gradient = getGradient(gradientPairs.length - 1);
+                const gradient = getLineGradient(TOTAL_COLOR_INDEX, ctx, gradientHeight);
                 datasets.push({
                     label: 'Totale stack',
                     data: totalData,
@@ -502,7 +521,7 @@
             renderCards(latestResults);
                 renderChart();
             };
-            const appendCard = (id, name, group, locationText, valueText) => {
+            const appendCard = (id, name, group, locationText, valueText, color) => {
                 const card = document.createElement('div');
                 card.className = 'card';
                 if (!state.selected.has(id)) card.classList.add('inactive');
@@ -513,6 +532,12 @@
                     const badge = document.createElement('span');
                     badge.className = 'badge';
                     badge.textContent = group;
+                    if (color) {
+                        badge.style.border = `1px solid ${color}`;
+                        badge.style.color = color;
+                        const bg = hexToRgba(color, 0.12);
+                        if (bg) badge.style.backgroundColor = bg;
+                    }
                     title.appendChild(badge);
                 }
                 const location = document.createElement('small');
@@ -525,10 +550,11 @@
                 card.appendChild(value);
                 els.cards.appendChild(card);
             };
-            state.utilities.forEach(util => {
+            state.utilities.forEach((util, idx) => {
                 const res = latestResults[util.id];
                 const val = res && res.values ? res.values[state.powerRegister?.startAddress] : null;
-                appendCard(util.id, util.name, util.group, `C${util.cabinet} - N${util.node}`, formatKw(val));
+                const color = getLineSolidColor(idx);
+                appendCard(util.id, util.name, util.group, `C${util.cabinet} - N${util.node}`, formatKw(val), color);
             });
             // stacked total card
             if (state.utilities.length) {
@@ -540,7 +566,8 @@
                         total = (total || 0) + val;
                     }
                 });
-                appendCard(TOTAL_STACK_ID, 'Totale stack', null, 'Somma macchine visibili', formatKw(total));
+                const totalColor = getLineSolidColor(TOTAL_COLOR_INDEX);
+                appendCard(TOTAL_STACK_ID, 'Totale stack', null, 'Somma macchine visibili', formatKw(total), totalColor);
             }
         }
 
