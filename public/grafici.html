@@ -7,6 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/graph-palette.css">
     <script src="/vendor/chart.umd.js"></script>
     <script>
         if (typeof Chart === 'undefined') {
@@ -130,6 +131,10 @@
             min-height: 200px;
             overflow: auto;
         }
+        .single-row-badges .panel {
+            flex: 0 0 auto;
+            padding-bottom: 8px;
+        }
         .controls {
             display: grid;
             grid-template-columns: 1fr;
@@ -187,6 +192,10 @@
             min-height: 260px;
             display: flex;
             flex-direction: column;
+        }
+        .single-row-badges .chart-card {
+            flex: 1 1 60vh;
+            min-height: 320px;
         }
         #groupChart {
             width: 100%;
@@ -311,18 +320,8 @@
         const MAX_POINTS = 480;
         let CHART_HEIGHT = 280;
         const TOTAL_STACK_ID = 'TOTAL_STACK';
-        const palette = ['#7dd3fc', '#a78bfa', '#f472b6', '#facc15', '#34d399', '#60a5fa', '#f97316'];
-        const gradientPairs = [
-            ['#a5e3ff', '#2193ff'],
-            ['#cbb8ff', '#6b21ff'],
-            ['#f9b8d9', '#db2777'],
-            ['#fde68a', '#d97706'],
-            ['#9ae6b4', '#0d9488'],
-            ['#a5bff9', '#1d4ed8'],
-            ['#ffb38a', '#ea580c'],
-            ['#c7f9cc', '#16a34a'] // total stack line
-        ];
-        const TOTAL_COLOR_INDEX = gradientPairs.length - 1;
+        let gradientPairs = [];
+        let TOTAL_COLOR_INDEX = 0;
 
         function hexToRgba(hex, alpha) {
             if (!hex || typeof hex !== 'string') return '';
@@ -333,6 +332,39 @@
             const g = (num >> 8) & 255;
             const b = num & 255;
             return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        }
+
+        function buildPalette() {
+            const styles = getComputedStyle(document.documentElement);
+            const pairs = [];
+            for (let i = 1; i <= 12; i++) {
+                const base = styles.getPropertyValue(`--graph-color-${i}`).trim();
+                const strong = styles.getPropertyValue(`--graph-color-${i}-strong`).trim();
+                if (base) {
+                    pairs.push([base, strong || base]);
+                }
+            }
+            if (pairs.length) return pairs;
+            // Fallback palette if CSS variables are missing
+            return [
+                ['#4cc9f0', '#1d9bf0'],
+                ['#f72585', '#b5179e'],
+                ['#ffd166', '#f59e0b'],
+                ['#06d6a0', '#059669'],
+                ['#9b5de5', '#7c3aed'],
+                ['#ef476f', '#e11d48'],
+                ['#118ab2', '#0ea5e9'],
+                ['#4ade80', '#16a34a'],
+                ['#f97316', '#c2410c'],
+                ['#c7f464', '#84cc16'],
+                ['#5eead4', '#0d9488'],
+                ['#e879f9', '#c026d3']
+            ];
+        }
+
+        function initPalette() {
+            gradientPairs = buildPalette();
+            TOTAL_COLOR_INDEX = gradientPairs.length - 1;
         }
 
         function getLineSolidColor(idx) {
@@ -348,6 +380,8 @@
             g.addColorStop(1, pair[1] || pair[0]);
             return g;
         }
+
+        initPalette();
 
         const socket = io();
         const state = {
@@ -569,6 +603,23 @@
                 const totalColor = getLineSolidColor(TOTAL_COLOR_INDEX);
                 appendCard(TOTAL_STACK_ID, 'Totale stack', null, 'Somma macchine visibili', formatKw(total), totalColor);
             }
+            updateBadgeRowLayout();
+        }
+
+        function updateBadgeRowLayout() {
+            const cards = els.cards?.children;
+            if (!cards || !cards.length) {
+                document.body.classList.remove('single-row-badges');
+                return;
+            }
+            const rows = new Set();
+            Array.from(cards).forEach(card => rows.add(card.offsetTop));
+            if (rows.size === 1) {
+                document.body.classList.add('single-row-badges');
+            } else {
+                document.body.classList.remove('single-row-badges');
+            }
+            adjustChartHeight();
         }
 
         function renderGroups(groups) {
@@ -670,6 +721,7 @@
 
         window.addEventListener('resize', () => {
             adjustChartHeight();
+            updateBadgeRowLayout();
             renderChart();
         });
     </script>

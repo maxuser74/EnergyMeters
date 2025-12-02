@@ -1,0 +1,38 @@
+:root {
+    /* 12-color palette tuned for dark backgrounds */
+    --graph-color-1: #4cc9f0;
+    --graph-color-1-strong: #1d9bf0;
+
+    --graph-color-2: #f72585;
+    --graph-color-2-strong: #b5179e;
+
+    --graph-color-3: #ffd166;
+    --graph-color-3-strong: #f59e0b;
+
+    --graph-color-4: #06d6a0;
+    --graph-color-4-strong: #059669;
+
+    --graph-color-5: #9b5de5;
+    --graph-color-5-strong: #7c3aed;
+
+    --graph-color-6: #ef476f;
+    --graph-color-6-strong: #e11d48;
+
+    --graph-color-7: #118ab2;
+    --graph-color-7-strong: #0ea5e9;
+
+    --graph-color-8: #4ade80;
+    --graph-color-8-strong: #16a34a;
+
+    --graph-color-9: #f97316;
+    --graph-color-9-strong: #c2410c;
+
+    --graph-color-10: #c7f464;
+    --graph-color-10-strong: #84cc16;
+
+    --graph-color-11: #5eead4;
+    --graph-color-11-strong: #0d9488;
+
+    --graph-color-12: #e879f9;
+    --graph-color-12-strong: #c026d3;
+}
