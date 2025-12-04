@@ -111,7 +111,12 @@ io.on('connection', (socket) => {
 
     // Handle filter updates
     socket.on('updateFilters', (filters) => {
-        activeFilters = filters;
+        activeFilters = {
+            ...activeFilters,
+            ...filters,
+            selectedMachines: Array.isArray(filters.selectedMachines) ? filters.selectedMachines : [],
+            onlySelected: !!filters.onlySelected
+        };
         console.log(chalk.magenta('Filters updated:', JSON.stringify(activeFilters)));
         loadUtilities(); // Reload to apply filters
         broadcastUpdate();
@@ -155,7 +160,7 @@ let history = {}; // Store historical data for graphs
 const MAX_HISTORY_POINTS = 60; // Keep last 60 readings
 let isPaused = false;
 let availableFilters = { cabinets: [], groups: [] };
-let activeFilters = { cabinets: [], groups: ['Generali'], minCurrent: 'all', onlyErrors: false };
+let activeFilters = { cabinets: [], groups: ['Generali'], minCurrent: 'all', onlyErrors: false, selectedMachines: [], onlySelected: false };
 let needsReload = false;
 
 // ============================================================================
@@ -249,23 +254,19 @@ function loadUtilities() {
         const cabinets = [...new Set(allUtilities.map(u => u.cabinet))].sort();
         const groups = [...new Set(allUtilities.map(u => u.group))].sort();
         availableFilters = { cabinets, groups };
+        const selectedSet = new Set((activeFilters.selectedMachines || []).map(id => String(id)));
+        const enforceSelected = activeFilters.onlySelected;
 
         // Apply filters
         utilities = allUtilities.filter(u => {
-            // If no filters set, show all
-            if (activeFilters.cabinets.length === 0 && activeFilters.groups.length === 0) return true;
-
             // Handle both string and number types for cabinet
-            const cabMatch = activeFilters.cabinets.some(c => String(c) === String(u.cabinet));
-            const groupMatch = activeFilters.groups.includes(u.group);
-            
             const cabSelected = activeFilters.cabinets.length > 0;
             const groupSelected = activeFilters.groups.length > 0;
+            const cabMatch = cabSelected ? activeFilters.cabinets.some(c => String(c) === String(u.cabinet)) : true;
+            const groupMatch = groupSelected ? activeFilters.groups.includes(u.group) : true;
+            const selectionMatch = enforceSelected ? selectedSet.has(String(u.id)) : true;
 
-            if (cabSelected && groupSelected) return cabMatch && groupMatch;
-            if (cabSelected) return cabMatch;
-            if (groupSelected) return groupMatch;
-            return true;
+            return cabMatch && groupMatch && selectionMatch;
         });
 
     } catch (e) {

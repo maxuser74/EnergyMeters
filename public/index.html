@@ -59,6 +59,29 @@
         .val-cell {
             font-family: 'Consolas', 'Courier New', monospace;
         }
+
+        .select-radio {
+            width: 16px;
+            height: 16px;
+            border: 2px solid #4ec9b0;
+            border-radius: 50%;
+            background: transparent;
+            cursor: pointer;
+            appearance: none;
+            -webkit-appearance: none;
+            position: relative;
+        }
+
+        .select-radio:checked::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 8px;
+            height: 8px;
+            background-color: #4ec9b0;
+            border-radius: 50%;
+        }
         
         /* Modal Styles */
         .modal {
@@ -287,6 +310,9 @@
             <label style="color: #d4d4d4; cursor: pointer;">
                 <input type="checkbox" id="showErrors" onchange="handleFilterChange(); renderTableFromCache()"> Phase Errors
             </label>
+            <label style="color: #d4d4d4; cursor: pointer; margin-left: 10px;">
+                <input type="checkbox" id="showSelected" onchange="handleFilterChange(); renderTableFromCache()"> Selected
+            </label>
         </div>
     </div>
 
@@ -308,6 +334,7 @@
         <table id="metersTable">
             <thead>
                 <tr id="tableHeader">
+                    <th style="width: 60px;">Scan</th>
                     <th>Machine</th>
                     <th>Group</th>
                     <th>Location</th>
@@ -386,6 +413,7 @@
         const detailModal = document.getElementById('detailModal');
         const detailTitle = document.getElementById('detailTitle');
         const detailBadges = document.getElementById('detailBadges');
+        const showSelectedCheckbox = document.getElementById('showSelected');
         
         const clientHistory = {};
         const MAX_CLIENT_HISTORY = 120;
@@ -393,6 +421,7 @@
         let serverStartTime = null;
         let lastAvailableFilters = null;
         let lastData = null;
+        const selectedMachines = new Set();
         
         // Detail View State
         let currentDetailId = null;
@@ -810,13 +839,27 @@
             
             const currentFilterVal = document.querySelector('input[name="currentFilter"]:checked').value;
             const filterErrors = document.getElementById('showErrors').checked;
+            const onlySelected = showSelectedCheckbox.checked;
+            const selectedList = Array.from(selectedMachines);
 
             socket.emit('updateFilters', {
                 cabinets: selectedCabinets,
                 groups: selectedGroups,
                 minCurrent: currentFilterVal,
-                onlyErrors: filterErrors
+                onlyErrors: filterErrors,
+                selectedMachines: selectedList,
+                onlySelected
             });
+        }
+
+        function handleSelectionChange(utilId, isChecked) {
+            if (isChecked) {
+                selectedMachines.add(utilId);
+            } else {
+                selectedMachines.delete(utilId);
+            }
+            handleFilterChange();
+            renderTableFromCache();
         }
 
         // Close modals when clicking outside
@@ -880,6 +923,14 @@
         socket.on('update', (data) => {
             lastData = data;
             const { utilities, registers, latestResults, config, startTime, isPaused, availableFilters, activeFilters } = data;
+
+            if (activeFilters) {
+                showSelectedCheckbox.checked = !!activeFilters.onlySelected;
+                if (Array.isArray(activeFilters.selectedMachines)) {
+                    selectedMachines.clear();
+                    activeFilters.selectedMachines.forEach(id => selectedMachines.add(id));
+                }
+            }
             
             // Auto-reload page if server restarted (e.g. code change)
             if (serverStartTime === null) {
@@ -938,8 +989,8 @@
         });
 
         function updateHeaders(registers) {
-            // Clear existing headers except first 4
-            while (tableHeader.children.length > 4) {
+            // Clear existing headers except first 5 (scan, machine, group, location, status)
+            while (tableHeader.children.length > 5) {
                 tableHeader.removeChild(tableHeader.lastChild);
             }
             
@@ -982,9 +1033,14 @@
             
             const currentFilterVal = document.querySelector('input[name="currentFilter"]:checked').value;
             const filterErrors = document.getElementById('showErrors').checked;
+            const showSelectedOnly = showSelectedCheckbox.checked;
 
             utilities.forEach(util => {
                 const res = latestResults[util.id] || {};
+
+                if (showSelectedOnly && !selectedMachines.has(util.id)) {
+                    return;
+                }
                 
                 // Filter by Current
                 if (currentFilterVal !== 'all') {
@@ -1043,6 +1099,18 @@
                 const tr = document.createElement('tr');
                 tr.style.cursor = 'pointer';
                 tr.onclick = () => openDetail(util.id);
+
+                // Selection
+                const tdSelect = document.createElement('td');
+                const selector = document.createElement('input');
+                selector.type = 'checkbox';
+                selector.className = 'select-radio';
+                selector.checked = selectedMachines.has(util.id);
+                selector.title = 'Include this machine in scan';
+                selector.onclick = (e) => e.stopPropagation();
+                selector.onchange = (e) => handleSelectionChange(util.id, e.target.checked);
+                tdSelect.appendChild(selector);
+                tr.appendChild(tdSelect);
                 
                 // Machine
                 const tdName = document.createElement('td');
@@ -1164,6 +1232,8 @@
                 tr.style.fontWeight = 'bold';
                 tr.style.backgroundColor = '#333';
                 tr.style.borderTop = '2px solid #4ec9b0';
+
+                tr.appendChild(document.createElement('td')); // Selection column
                 
                 const tdName = document.createElement('td');
                 tdName.textContent = 'TOTAL';
