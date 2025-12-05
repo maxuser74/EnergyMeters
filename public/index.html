@@ -129,7 +129,6 @@
             padding: 8px 16px;
             cursor: pointer;
             border-radius: 4px;
-            margin-left: 10px;
         }
         .btn-change:hover {
             background-color: #1177bb;
@@ -141,7 +140,6 @@
             padding: 8px 16px;
             cursor: pointer;
             border-radius: 4px;
-            margin-left: 10px;
             font-weight: bold;
         }
         .btn-pause.paused {
@@ -283,7 +281,7 @@
 <body>
     <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px;">
         <h1 style="margin: 0;">Energy Meters Live View</h1>
-        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+        <div style="display: flex; gap: 10px; flex-wrap: wrap; position: relative; z-index: 10;">
             <button id="btnPause" class="btn-pause" onclick="togglePause()">Pause</button>
             <button class="btn-change" style="background-color: #333;" onclick="showAbout()">About</button>
             <button class="btn-change" onclick="goToGrafici()">Grafici</button>

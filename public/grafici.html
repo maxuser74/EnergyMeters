@@ -333,7 +333,7 @@
         }
 
         const persistedSelection = loadStoredSelection();
-        const DEFAULT_GROUP = persistedSelection.groups[0] || 'Compressori';
+        const DEFAULT_GROUP = 'All';
         const MAX_POINTS = 480;
         let CHART_HEIGHT = 280;
         const TOTAL_STACK_ID = 'TOTAL_STACK';
@@ -648,11 +648,16 @@
         }
 
         function renderGroups(groups) {
-            if (!Array.isArray(groups) || !groups.length) {
-                els.groupSelect.innerHTML = '';
-                return;
-            }
             els.groupSelect.innerHTML = '';
+            
+            const allOpt = document.createElement('option');
+            allOpt.value = 'All';
+            allOpt.textContent = 'All Groups';
+            if (state.group === 'All') allOpt.selected = true;
+            els.groupSelect.appendChild(allOpt);
+
+            if (!Array.isArray(groups) || !groups.length) return;
+
             groups.forEach(g => {
                 const opt = document.createElement('option');
                 opt.value = g;
@@ -668,7 +673,7 @@
             state.history = {};
             state.selected = new Set();
             state.selectionInitialized = false;
-            els.groupLabel.textContent = newGroup;
+            els.groupLabel.textContent = newGroup === 'All' ? 'All Groups' : newGroup;
             requestGroupData();
         }
 
@@ -690,9 +695,10 @@
         });
 
         function requestGroupData() {
+            const groupsToRequest = state.group === 'All' ? persistedSelection.groups : [state.group];
             socket.emit('updateFilters', {
                 cabinets: [],
-                groups: [state.group],
+                groups: groupsToRequest,
                 minCurrent: 'all',
                 onlyErrors: false
             });
@@ -713,13 +719,14 @@
             const groupsFromData = [...new Set(scopedUtilities.map(u => u.group).filter(Boolean))];
             const fallbackGroups = data.availableFilters?.group1 || data.availableFilters?.groups || [];
             const groups = groupsFromData.length ? groupsFromData : fallbackGroups;
-            const hasGroup = groups.some(g => g.toLowerCase() === state.group.toLowerCase());
-            if (!hasGroup && groups.length) {
-                setGroup(groups[0]);
-            }
+            
             renderGroups(groups);
 
-            state.utilities = scopedUtilities.filter(u => u.group && u.group.toLowerCase() === state.group.toLowerCase());
+            if (state.group === 'All') {
+                state.utilities = scopedUtilities;
+            } else {
+                state.utilities = scopedUtilities.filter(u => u.group && u.group.toLowerCase() === state.group.toLowerCase());
+            }
             // If we switched group after renderGroups, ensure dropdown reflects it
             if (els.groupSelect.value && els.groupSelect.value.toLowerCase() !== state.group.toLowerCase()) {
                 els.groupSelect.value = state.group;
