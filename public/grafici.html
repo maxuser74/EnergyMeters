@@ -316,7 +316,24 @@
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
-        const DEFAULT_GROUP = 'Compressori';
+        const GRAFICI_CACHE_KEY = 'graficiVisibleUtilities';
+        function loadStoredSelection() {
+            try {
+                const raw = localStorage.getItem(GRAFICI_CACHE_KEY);
+                if (!raw) return { ids: new Set(), groups: [], raw: [] };
+                const parsed = JSON.parse(raw);
+                const list = Array.isArray(parsed.utilities) ? parsed.utilities : [];
+                const ids = new Set(list.map(u => u.id));
+                const groups = [...new Set(list.map(u => u.group1 || u.group).filter(Boolean))];
+                return { ids, groups, raw: list };
+            } catch (e) {
+                console.warn('Unable to load cached grafici selection', e);
+                return { ids: new Set(), groups: [], raw: [] };
+            }
+        }
+
+        const persistedSelection = loadStoredSelection();
+        const DEFAULT_GROUP = persistedSelection.groups[0] || 'Compressori';
         const MAX_POINTS = 480;
         let CHART_HEIGHT = 280;
         const TOTAL_STACK_ID = 'TOTAL_STACK';
@@ -405,6 +422,7 @@
             empty: document.getElementById('emptyState'),
             sampleInfo: document.getElementById('sampleInfo')
         };
+        els.groupLabel.textContent = state.group;
 
         function formatKw(value) {
             if (value === null || value === undefined || isNaN(value)) return '-';
@@ -418,6 +436,13 @@
 
         function findPowerRegister(registers) {
             return registers.find(r => r.label === 'kW' || r.label === 'W' || r.label === 'Active Power W') || null;
+        }
+
+        function normalizeUtilities(list) {
+            return (list || []).map(u => ({
+                ...u,
+                group: u.group || u.group1 || u.group2 || 'Unknown'
+            }));
         }
 
         function ensureHistory(utilId) {
@@ -623,7 +648,10 @@
         }
 
         function renderGroups(groups) {
-            if (!Array.isArray(groups) || !groups.length) return;
+            if (!Array.isArray(groups) || !groups.length) {
+                els.groupSelect.innerHTML = '';
+                return;
+            }
             els.groupSelect.innerHTML = '';
             groups.forEach(g => {
                 const opt = document.createElement('option');
@@ -680,16 +708,20 @@
         socket.on('update', (data) => {
             state.registers = data.registers;
             state.powerRegister = findPowerRegister(data.registers);
-            const groups = data.availableFilters?.groups || [];
+            const utilitiesAll = normalizeUtilities(data.utilities);
+            const scopedUtilities = persistedSelection.ids.size ? utilitiesAll.filter(u => persistedSelection.ids.has(u.id)) : utilitiesAll;
+            const groupsFromData = [...new Set(scopedUtilities.map(u => u.group).filter(Boolean))];
+            const fallbackGroups = data.availableFilters?.group1 || data.availableFilters?.groups || [];
+            const groups = groupsFromData.length ? groupsFromData : fallbackGroups;
             const hasGroup = groups.some(g => g.toLowerCase() === state.group.toLowerCase());
             if (!hasGroup && groups.length) {
                 setGroup(groups[0]);
             }
             renderGroups(groups);
 
-            state.utilities = (data.utilities || []).filter(u => u.group && u.group.toLowerCase() === state.group.toLowerCase());
+            state.utilities = scopedUtilities.filter(u => u.group && u.group.toLowerCase() === state.group.toLowerCase());
             // If we switched group after renderGroups, ensure dropdown reflects it
-            if (els.groupSelect.value.toLowerCase() !== state.group.toLowerCase()) {
+            if (els.groupSelect.value && els.groupSelect.value.toLowerCase() !== state.group.toLowerCase()) {
                 els.groupSelect.value = state.group;
             }
 

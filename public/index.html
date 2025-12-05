@@ -286,7 +286,7 @@
         <div style="display: flex; gap: 10px; flex-wrap: wrap;">
             <button id="btnPause" class="btn-pause" onclick="togglePause()">Pause</button>
             <button class="btn-change" style="background-color: #333;" onclick="showAbout()">About</button>
-            <a href="/grafici.html" class="btn-change" style="text-decoration: none;">Grafici</a>
+            <button class="btn-change" onclick="goToGrafici()">Grafici</button>
         </div>
     </div>
     
@@ -423,6 +423,8 @@
         let lastAvailableFilters = null;
         let lastData = null;
         const selectedMachines = new Set();
+        const GRAFICI_CACHE_KEY = 'graficiVisibleUtilities';
+        let lastVisibleUtilities = [];
         
         // Detail View State
         let currentDetailId = null;
@@ -432,6 +434,24 @@
             if (lastData) {
                 updateTable(lastData.utilities, lastData.registers, lastData.latestResults, lastData.config);
             }
+        }
+
+        function cacheGraficiSelection() {
+            if (!lastVisibleUtilities || lastVisibleUtilities.length === 0) return;
+            try {
+                const payload = {
+                    timestamp: Date.now(),
+                    utilities: lastVisibleUtilities
+                };
+                localStorage.setItem(GRAFICI_CACHE_KEY, JSON.stringify(payload));
+            } catch (err) {
+                console.warn('Unable to cache grafici selection', err);
+            }
+        }
+
+        function goToGrafici() {
+            cacheGraficiSelection();
+            window.location.href = '/grafici.html';
         }
 
         function showFileSelection() {
@@ -924,6 +944,8 @@
             statusBar.style.color = '#f44336';
         });
 
+        window.addEventListener('beforeunload', cacheGraficiSelection);
+
         socket.on('update', (data) => {
             lastData = data;
             const { utilities, registers, latestResults, config, startTime, isPaused, availableFilters, activeFilters } = data;
@@ -990,6 +1012,9 @@
                     socket.emit('getHistory', currentDetailId);
                 }
             }
+
+            // Persist visible selection so Grafici can pick it up on navigation
+            cacheGraficiSelection();
         });
 
         function updateHeaders(registers) {
@@ -1034,6 +1059,7 @@
         function updateTable(utilities, registers, latestResults, config) {
             tableBody.innerHTML = '';
             let totalKw = 0;
+            lastVisibleUtilities = [];
             
             const currentFilterVal = document.querySelector('input[name="currentFilter"]:checked').value;
             const filterErrors = document.getElementById('showErrors').checked;
@@ -1099,6 +1125,15 @@
                     
                     if (!hasError) return;
                 }
+
+                lastVisibleUtilities.push({
+                    id: util.id,
+                    name: util.name,
+                    group1: util.group1 || util.group || 'Unknown',
+                    group2: util.group2 || '',
+                    cabinet: util.cabinet,
+                    node: util.node
+                });
 
                 const tr = document.createElement('tr');
                 tr.style.cursor = 'pointer';
