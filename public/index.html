@@ -321,12 +321,12 @@
     <!-- Filters -->
     <div id="filtersContainer" style="background-color: #252526; padding: 10px; margin-bottom: 20px; border-radius: 4px; border: 1px solid #3e3e42; display: none;">
         <div style="margin-bottom: 8px;">
-            <strong style="color: #569cd6; margin-right: 10px;">Cabinets:</strong>
-            <span id="cabinetFilters"></span>
+            <strong style="color: #569cd6; margin-right: 10px;">Group1:</strong>
+            <span id="group1Filters"></span>
         </div>
         <div>
-            <strong style="color: #569cd6; margin-right: 10px;">Groups:</strong>
-            <span id="groupFilters"></span>
+            <strong style="color: #569cd6; margin-right: 10px;">Group2:</strong>
+            <span id="group2Filters"></span>
         </div>
     </div>
 
@@ -336,7 +336,8 @@
                 <tr id="tableHeader">
                     <th style="width: 60px;">Scan</th>
                     <th>Machine</th>
-                    <th>Group</th>
+                    <th>Group1</th>
+                    <th>Group2</th>
                     <th>Location</th>
                     <th>Status</th>
                     <!-- Dynamic headers will go here -->
@@ -408,8 +409,8 @@
         const aboutModal = document.getElementById('aboutModal');
         const btnPause = document.getElementById('btnPause');
         const filtersContainer = document.getElementById('filtersContainer');
-        const cabinetFiltersSpan = document.getElementById('cabinetFilters');
-        const groupFiltersSpan = document.getElementById('groupFilters');
+        const group1FiltersSpan = document.getElementById('group1Filters');
+        const group2FiltersSpan = document.getElementById('group2Filters');
         const detailModal = document.getElementById('detailModal');
         const detailTitle = document.getElementById('detailTitle');
         const detailBadges = document.getElementById('detailBadges');
@@ -777,34 +778,19 @@
         }
 
         function renderFilters(available, active) {
+            const activeGrp1 = (active && active.group1) ? active.group1 : [];
+            const activeGrp2 = (active && active.group2) ? active.group2 : [];
+
             // Check if options changed
             const optionsChanged = !lastAvailableFilters || 
                 JSON.stringify(available) !== JSON.stringify(lastAvailableFilters);
             
             if (optionsChanged) {
                 lastAvailableFilters = available;
-                
-                // Render Cabinets
-                cabinetFiltersSpan.innerHTML = '';
-                available.cabinets.forEach(cab => {
-                    const label = document.createElement('label');
-                    label.style.marginRight = '15px';
-                    label.style.cursor = 'pointer';
-                    
-                    const cb = document.createElement('input');
-                    cb.type = 'checkbox';
-                    cb.value = cab;
-                    cb.dataset.type = 'cabinet';
-                    cb.onchange = handleFilterChange;
-                    
-                    label.appendChild(cb);
-                    label.appendChild(document.createTextNode(` Cab ${cab}`));
-                    cabinetFiltersSpan.appendChild(label);
-                });
 
-                // Render Groups
-                groupFiltersSpan.innerHTML = '';
-                available.groups.forEach(grp => {
+                // Render Main Group1
+                group1FiltersSpan.innerHTML = '';
+                (available.group1 || []).forEach(grp => {
                     const label = document.createElement('label');
                     label.style.marginRight = '15px';
                     label.style.cursor = 'pointer';
@@ -812,30 +798,48 @@
                     const cb = document.createElement('input');
                     cb.type = 'checkbox';
                     cb.value = grp;
-                    cb.dataset.type = 'group';
+                    cb.dataset.type = 'group1';
                     cb.onchange = handleFilterChange;
                     
                     label.appendChild(cb);
                     label.appendChild(document.createTextNode(` ${grp}`));
-                    groupFiltersSpan.appendChild(label);
+                    group1FiltersSpan.appendChild(label);
+                });
+
+                // Render Auxiliary Group2
+                group2FiltersSpan.innerHTML = '';
+                (available.group2 || []).forEach(grp => {
+                    const label = document.createElement('label');
+                    label.style.marginRight = '15px';
+                    label.style.cursor = 'pointer';
+                    
+                    const cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    cb.value = grp;
+                    cb.dataset.type = 'group2';
+                    cb.onchange = handleFilterChange;
+                    
+                    label.appendChild(cb);
+                    label.appendChild(document.createTextNode(` ${grp}`));
+                    group2FiltersSpan.appendChild(label);
                 });
             }
 
             // Update Checked State
-            const cabCheckboxes = cabinetFiltersSpan.querySelectorAll('input');
-            cabCheckboxes.forEach(cb => {
-                cb.checked = active.cabinets.some(c => String(c) === String(cb.value));
+            const grp1Checkboxes = group1FiltersSpan.querySelectorAll('input');
+            grp1Checkboxes.forEach(cb => {
+                cb.checked = activeGrp1.includes(cb.value);
             });
 
-            const grpCheckboxes = groupFiltersSpan.querySelectorAll('input');
-            grpCheckboxes.forEach(cb => {
-                cb.checked = active.groups.includes(cb.value);
+            const grp2Checkboxes = group2FiltersSpan.querySelectorAll('input');
+            grp2Checkboxes.forEach(cb => {
+                cb.checked = activeGrp2.includes(cb.value);
             });
         }
 
         function handleFilterChange() {
-            const selectedCabinets = Array.from(cabinetFiltersSpan.querySelectorAll('input:checked')).map(cb => cb.value);
-            const selectedGroups = Array.from(groupFiltersSpan.querySelectorAll('input:checked')).map(cb => cb.value);
+            const selectedGroup1 = Array.from(group1FiltersSpan.querySelectorAll('input:checked')).map(cb => cb.value);
+            const selectedGroup2 = Array.from(group2FiltersSpan.querySelectorAll('input:checked')).map(cb => cb.value);
             
             const currentFilterVal = document.querySelector('input[name="currentFilter"]:checked').value;
             const filterErrors = document.getElementById('showErrors').checked;
@@ -843,8 +847,8 @@
             const selectedList = Array.from(selectedMachines);
 
             socket.emit('updateFilters', {
-                cabinets: selectedCabinets,
-                groups: selectedGroups,
+                group1: selectedGroup1,
+                group2: selectedGroup2,
                 minCurrent: currentFilterVal,
                 onlyErrors: filterErrors,
                 selectedMachines: selectedList,
@@ -989,8 +993,8 @@
         });
 
         function updateHeaders(registers) {
-            // Clear existing headers except first 5 (scan, machine, group, location, status)
-            while (tableHeader.children.length > 5) {
+            // Clear existing headers except first 6 (scan, machine, group1, group2, location, status)
+            while (tableHeader.children.length > 6) {
                 tableHeader.removeChild(tableHeader.lastChild);
             }
             
@@ -1118,9 +1122,13 @@
                 tr.appendChild(tdName);
 
                 // Group
-                const tdGroup = document.createElement('td');
-                tdGroup.textContent = util.group;
-                tr.appendChild(tdGroup);
+                const tdGroup1 = document.createElement('td');
+                tdGroup1.textContent = util.group1 || util.group || 'Unknown';
+                tr.appendChild(tdGroup1);
+
+                const tdGroup2 = document.createElement('td');
+                tdGroup2.textContent = util.group2 || '-';
+                tr.appendChild(tdGroup2);
 
                 // Location
                 const tdLoc = document.createElement('td');
@@ -1240,7 +1248,8 @@
                 tdName.style.color = '#4ec9b0';
                 tr.appendChild(tdName);
                 
-                tr.appendChild(document.createElement('td')); // Group
+                tr.appendChild(document.createElement('td')); // Group1
+                tr.appendChild(document.createElement('td')); // Group2
                 tr.appendChild(document.createElement('td')); // Location
                 tr.appendChild(document.createElement('td')); // Status
                 

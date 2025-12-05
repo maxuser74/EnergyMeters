@@ -159,8 +159,8 @@ let latestResults = {};
 let history = {}; // Store historical data for graphs
 const MAX_HISTORY_POINTS = 60; // Keep last 60 readings
 let isPaused = false;
-let availableFilters = { cabinets: [], groups: [] };
-let activeFilters = { cabinets: [], groups: ['Generali'], minCurrent: 'all', onlyErrors: false, selectedMachines: [], onlySelected: false };
+let availableFilters = { group1: [], group2: [] };
+let activeFilters = { group1: [], group2: [], minCurrent: 'all', onlyErrors: false, selectedMachines: [], onlySelected: false };
 let needsReload = false;
 
 // ============================================================================
@@ -226,7 +226,8 @@ function loadUtilities() {
             const name = row['Machine'] || row['Name'] || row['Nome'] || 'Unknown';
             const cabinet = row['Cabinet'] || row['Quadro'];
             const node = row['Node'] || row['Nodo'];
-            const group = row['Group'] || 'Unknown';
+            const group1 = row['Group1'] || row['Group 1'] || row['Main Group'] || row['Group'] || 'Unknown';
+            const group2 = row['Group2'] || row['Group 2'] || row['Aux Group'] || row['SubGroup'] || 'Unknown';
             let ip = row['IP'] || row['Indirizzo IP'];
             
             // Fallback: Map Cabinet ID to known IP addresses if not specified in file
@@ -244,29 +245,29 @@ function loadUtilities() {
                 name: name,
                 cabinet: cabinet,
                 node: node,
-                group: group,
+                group1,
+                group2,
                 ip: ip,
                 port: row['Port'] || 502
             };
         }).filter(u => u.ip && u.node);
 
         // Extract available options
-        const cabinets = [...new Set(allUtilities.map(u => u.cabinet))].sort();
-        const groups = [...new Set(allUtilities.map(u => u.group))].sort();
-        availableFilters = { cabinets, groups };
+        const group1 = [...new Set(allUtilities.map(u => u.group1))].sort();
+        const group2 = [...new Set(allUtilities.map(u => u.group2))].sort();
+        availableFilters = { group1, group2 };
         const selectedSet = new Set((activeFilters.selectedMachines || []).map(id => String(id)));
         const enforceSelected = activeFilters.onlySelected;
 
         // Apply filters
         utilities = allUtilities.filter(u => {
-            // Handle both string and number types for cabinet
-            const cabSelected = activeFilters.cabinets.length > 0;
-            const groupSelected = activeFilters.groups.length > 0;
-            const cabMatch = cabSelected ? activeFilters.cabinets.some(c => String(c) === String(u.cabinet)) : true;
-            const groupMatch = groupSelected ? activeFilters.groups.includes(u.group) : true;
+            const group1Selected = activeFilters.group1.length > 0;
+            const group2Selected = activeFilters.group2.length > 0;
+            const group1Match = group1Selected ? activeFilters.group1.includes(u.group1) : true;
+            const group2Match = group2Selected ? activeFilters.group2.includes(u.group2) : true;
             const selectionMatch = enforceSelected ? selectedSet.has(String(u.id)) : true;
 
-            return cabMatch && groupMatch && selectionMatch;
+            return group1Match && group2Match && selectionMatch;
         });
 
     } catch (e) {
