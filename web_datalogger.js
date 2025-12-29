@@ -19,7 +19,35 @@ const XLSX = require('xlsx');
 const chalk = require('chalk');
 const express = require('express');
 const http = require('http');
+const https = require('https');
 const { Server } = require('socket.io');
+
+// Load .env manually since dotenv is not installed
+try {
+    const envPath = path.join(__dirname, '.env');
+    if (fs.existsSync(envPath)) {
+        const envConfig = fs.readFileSync(envPath, 'utf8');
+        envConfig.split(/\r?\n/).forEach(line => {
+            const cleanLine = line.trim();
+            if (!cleanLine || cleanLine.startsWith('#')) return;
+            
+            const match = cleanLine.match(/^([^=]+)=(.*)$/);
+            if (match) {
+                const key = match[1].trim();
+                const value = match[2].trim();
+                process.env[key] = value;
+            }
+        });
+        console.log(chalk.green('Loaded configuration from .env'));
+        // Debug: Check if keys are loaded
+        if (!process.env.INFLUXDB_URL) console.warn(chalk.yellow('Warning: INFLUXDB_URL not found in .env'));
+        if (!process.env.INFLUXDB_TOKEN) console.warn(chalk.yellow('Warning: INFLUXDB_TOKEN not found in .env'));
+    } else {
+        console.warn(chalk.yellow('.env file not found at ' + envPath));
+    }
+} catch (e) {
+    console.warn('Could not load .env file', e);
+}
 
 // ============================================================================
 // Global Error Handling
@@ -132,6 +160,28 @@ io.on('connection', (socket) => {
             });
         }
     });
+
+    // Handle Save to InfluxDB (Manual)
+    socket.on('saveSelectedToInflux', (selectedIds) => {
+        console.log(chalk.blue(`Saving ${selectedIds.length} machines to InfluxDB...`));
+        saveToInflux(selectedIds)
+            .then(msg => {
+                console.log(chalk.green(msg));
+                socket.emit('saveResult', { success: true, message: msg });
+            })
+            .catch(err => {
+                console.error(chalk.red(err));
+                socket.emit('saveResult', { success: false, message: err });
+            });
+    });
+
+    // Handle Toggle Auto-Save
+    socket.on('toggleAutoSave', (shouldSave) => {
+        isSavingDB = !!shouldSave;
+        console.log(chalk.magenta(`Auto-Save to InfluxDB is now ${isSavingDB ? 'ON' : 'OFF'}`));
+        // Broadcast status to all clients so UI stays in sync
+        io.emit('autoSaveStatus', isSavingDB);
+    });
 });
 
 function getReadFiles() {
@@ -162,6 +212,116 @@ let isPaused = false;
 let availableFilters = { group1: [], group2: [] };
 let activeFilters = { group1: [], group2: [], minCurrent: 'all', onlyErrors: false, selectedMachines: [], onlySelected: false };
 let needsReload = false;
+
+let isSavingDB = false;
+
+function saveToInflux(selectedIds) {
+    if (!process.env.INFLUXDB_URL || !process.env.INFLUXDB_TOKEN) {
+        console.error('InfluxDB credentials missing in .env');
+        return Promise.reject('InfluxDB credentials missing');
+    }
+
+    const lines = [];
+    const timestamp = Math.floor(Date.now() / 1000); // Seconds precision
+
+    // If no specific IDs selected, maybe save all? 
+    // But the request says "save selected data". 
+    // If selectedIds is empty, we assume nothing to save.
+    if (!selectedIds || selectedIds.length === 0) {
+        return Promise.resolve('No machines selected');
+    }
+
+    // console.log(chalk.yellow(`Debug: Saving ${selectedIds.length} IDs. Available utilities: ${utilities.length}`));
+
+    selectedIds.forEach(id => {
+        // We need to find the utility info. 
+        const util = utilities.find(u => u.id === id);
+        const res = latestResults[id];
+        
+        // Allow saving if status is OK or READING (as long as we have values)
+        const isValidStatus = res && (res.status === 'OK' || res.status === 'READING');
+        const hasValues = res && res.values && Object.keys(res.values).length > 0;
+
+        if (util && isValidStatus && hasValues) {
+            // Tags
+            const tags = [
+                `machine=${util.name.replace(/ /g, '_')}`,
+                `group1=${(util.group1 || util.group || 'Unknown').replace(/ /g, '_')}`,
+                `cabinet=${util.cabinet}`,
+                `node=${util.node}`
+            ];
+            
+            // Fields
+            const fields = [];
+            registers.forEach(reg => {
+                const val = res.values[reg.startAddress];
+                if (val !== undefined && val !== null) {
+                    // Clean label for field key
+                    let key = reg.label.trim().replace(/ /g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+                    
+                    // Explicitly ensure kW is saved if label is 'kW'
+                    if (reg.label === 'kW') key = 'kW';
+
+                    fields.push(`${key}=${val}`);
+                } else {
+                    // Debug missing values for kW
+                    if (reg.label === 'kW') {
+                        console.log(chalk.yellow(`Debug: Missing value for kW (Addr: ${reg.startAddress}) on ${util.id}`));
+                    }
+                }
+            });
+
+            if (fields.length > 0) {
+                const line = `energy_meter,${tags.join(',')} ${fields.join(',')} ${timestamp}`;
+                lines.push(line);
+                // Debug log for the first machine to see what's being sent
+                if (lines.length === 1) {
+                    console.log(chalk.gray(`Debug Influx Line: ${line}`));
+                }
+            }
+        }
+    });
+
+    if (lines.length === 0) {
+        return Promise.resolve('No valid data to save for selected machines');
+    }
+
+    const data = lines.join('\n');
+    const urlStr = `${process.env.INFLUXDB_URL}/api/v2/write?org=${encodeURIComponent(process.env.INFLUXDB_ORG)}&bucket=${encodeURIComponent(process.env.INFLUXDB_BUCKET)}&precision=s`;
+    const url = new URL(urlStr);
+
+    return new Promise((resolve, reject) => {
+        const options = {
+            method: 'POST',
+            headers: {
+                'Authorization': `Token ${process.env.INFLUXDB_TOKEN}`,
+                'Content-Type': 'text/plain; charset=utf-8',
+                'Content-Length': Buffer.byteLength(data)
+            }
+        };
+
+        const req = (process.env.INFLUXDB_URL.startsWith('https') ? https : http).request(url, options, (res) => {
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+                resolve('Data saved to InfluxDB');
+            } else {
+                let body = '';
+                res.on('data', chunk => body += chunk);
+                res.on('end', () => {
+                    // console.error(`InfluxDB Error (${res.statusCode}): ${body}`);
+                    reject(`InfluxDB Error: ${res.statusCode} ${body}`);
+                });
+            }
+        });
+
+        req.on('error', (e) => {
+            console.error('InfluxDB Request Error:', e);
+            reject(`Request Error: ${e.message}`);
+        });
+
+        req.write(data);
+        req.end();
+    });
+}
 
 // ============================================================================
 // Data Loading Functions
@@ -299,7 +459,7 @@ function loadRegisters() {
             // Calculate start address (Modbus often uses End Address in docs)
             const startAddress = endAddress - (count - 1);
             
-            let label = row['Title'] || row['Lettura'] || `Reg ${endAddress}`;
+            let label = (row['Title'] || row['Lettura'] || `Reg ${endAddress}`).trim();
             let factor = parseFloat(row['Factor'] || 1.0);
 
             // Auto-convert W to kW for better readability
@@ -410,6 +570,7 @@ function broadcastUpdate() {
         config,
         startTime: START_TIME,
         isPaused,
+        isSavingDB, // Send saving status
         availableFilters,
         activeFilters
     });
@@ -542,6 +703,14 @@ async function run() {
             }
 
             broadcastUpdate();
+        }
+
+        // --- Continuous Saving Logic ---
+        if (isSavingDB && activeFilters.selectedMachines && activeFilters.selectedMachines.length > 0) {
+            // Save silently (no console spam unless error)
+            saveToInflux(activeFilters.selectedMachines).catch(err => {
+                console.error(chalk.red('Auto-Save Error: ' + err));
+            });
         }
 
         // If reloading, skip the wait interval to start immediately

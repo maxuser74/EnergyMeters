@@ -285,6 +285,7 @@
             <button id="btnPause" class="btn-pause" onclick="togglePause()">Pause</button>
             <button class="btn-change" style="background-color: #333;" onclick="showAbout()">About</button>
             <button class="btn-change" onclick="goToGrafici()">Grafici</button>
+            <button id="btnSaveDB" class="btn-change" style="background-color: #2e7d32;" onclick="toggleAutoSave()">Start Saving DB</button>
         </div>
     </div>
     
@@ -406,6 +407,7 @@
         const fileList = document.getElementById('fileList');
         const aboutModal = document.getElementById('aboutModal');
         const btnPause = document.getElementById('btnPause');
+        const btnSaveDB = document.getElementById('btnSaveDB');
         const filtersContainer = document.getElementById('filtersContainer');
         const group1FiltersSpan = document.getElementById('group1Filters');
         const group2FiltersSpan = document.getElementById('group2Filters');
@@ -451,6 +453,52 @@
             cacheGraficiSelection();
             window.location.href = '/grafici.html';
         }
+
+        function toggleAutoSave() {
+            const selectedList = Array.from(selectedMachines);
+            if (selectedList.length === 0) {
+                alert("No machines selected! Select machines before starting save.");
+                return;
+            }
+            
+            // Toggle logic is handled by server state, but we send the intent
+            // We check current state from button text or a variable
+            const isCurrentlySaving = btnSaveDB.textContent.includes("Stop");
+            
+            if (!isCurrentlySaving) {
+                if (confirm(`Start continuous saving for ${selectedList.length} selected machines to InfluxDB?`)) {
+                    socket.emit('toggleAutoSave', true);
+                }
+            } else {
+                socket.emit('toggleAutoSave', false);
+            }
+        }
+
+        socket.on('autoSaveStatus', (isSaving) => {
+            updateSaveButton(isSaving);
+        });
+
+        function updateSaveButton(isSaving) {
+            if (isSaving) {
+                btnSaveDB.textContent = "Stop Saving DB";
+                btnSaveDB.style.backgroundColor = "#d32f2f"; // Red for Stop
+                // Add a pulsing effect or indicator if desired
+            } else {
+                btnSaveDB.textContent = "Start Saving DB";
+                btnSaveDB.style.backgroundColor = "#2e7d32"; // Green for Start
+            }
+        }
+
+        socket.on('saveResult', (res) => {
+            if (res.success) {
+                console.log('Save Success:', res.message);
+                // Optional: Show a small toast or just log
+                // alert(res.message); 
+            } else {
+                console.error('Save Failed:', res.message);
+                alert('Error saving to InfluxDB: ' + res.message);
+            }
+        });
 
         function showFileSelection() {
             fileModal.style.display = "block";
@@ -946,7 +994,7 @@
 
         socket.on('update', (data) => {
             lastData = data;
-            const { utilities, registers, latestResults, config, startTime, isPaused, availableFilters, activeFilters } = data;
+            const { utilities, registers, latestResults, config, startTime, isPaused, isSavingDB, availableFilters, activeFilters } = data;
 
             if (activeFilters) {
                 showSelectedCheckbox.checked = !!activeFilters.onlySelected;
@@ -955,6 +1003,9 @@
                     activeFilters.selectedMachines.forEach(id => selectedMachines.add(id));
                 }
             }
+            
+            // Update Save Button State
+            updateSaveButton(isSavingDB);
             
             // Auto-reload page if server restarted (e.g. code change)
             if (serverStartTime === null) {
