@@ -695,13 +695,30 @@
         });
 
         function requestGroupData() {
-            const groupsToRequest = state.group === 'All' ? persistedSelection.groups : [state.group];
-            socket.emit('updateFilters', {
-                cabinets: [],
-                groups: groupsToRequest,
-                minCurrent: 'all',
-                onlyErrors: false
-            });
+            const hasSelection = persistedSelection.ids.size > 0;
+            
+            if (hasSelection) {
+                // Poll specific selected machines only for faster updates
+                const ids = Array.from(persistedSelection.ids);
+                socket.emit('updateFilters', {
+                    cabinets: [],
+                    group1: [],
+                    group2: [],
+                    selectedMachines: ids,
+                    onlySelected: true,
+                    minCurrent: 'all',
+                    onlyErrors: false
+                });
+            } else {
+                // Fallback: poll by group if no specific machines selected
+                const groupsToRequest = state.group === 'All' ? persistedSelection.groups : [state.group];
+                socket.emit('updateFilters', {
+                    cabinets: [],
+                    groups: groupsToRequest,
+                    minCurrent: 'all',
+                    onlyErrors: false
+                });
+            }
         }
 
         socket.on('connect', () => {
