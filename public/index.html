@@ -373,7 +373,10 @@
         <table id="metersTable">
             <thead>
                 <tr id="tableHeader">
-                    <th style="width: 60px;">Scan</th>
+                    <th style="width: 60px; text-align: center;">
+                        Scan<br>
+                        <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this.checked)" style="margin-top: 4px; cursor: pointer;">
+                    </th>
                     <th>Machine</th>
                     <th>Group1</th>
                     <th>Group2</th>
@@ -919,6 +922,21 @@
             });
         }
 
+        function toggleSelectAll(isChecked) {
+            const checkboxes = document.querySelectorAll('.select-radio');
+            checkboxes.forEach(cb => cb.checked = isChecked);
+            
+            if (isChecked) {
+                lastVisibleUtilities.forEach(util => selectedMachines.add(util.id));
+            } else {
+                lastVisibleUtilities.forEach(util => selectedMachines.delete(util.id));
+            }
+            
+            handleFilterChange();
+            cacheGraficiSelection();
+            renderTableFromCache();
+        }
+
         function handleSelectionChange(utilId, isChecked) {
             if (isChecked) {
                 selectedMachines.add(utilId);
@@ -1395,6 +1413,15 @@
 
                 tableBody.appendChild(tr);
             });
+
+            // Update Select All Checkbox
+            const selectAllCb = document.getElementById('selectAllCheckbox');
+            if (selectAllCb) {
+                const allSelected = lastVisibleUtilities.length > 0 && lastVisibleUtilities.every(u => selectedMachines.has(u.id));
+                const someSelected = lastVisibleUtilities.length > 0 && lastVisibleUtilities.some(u => selectedMachines.has(u.id));
+                selectAllCb.checked = allSelected;
+                selectAllCb.indeterminate = someSelected && !allSelected;
+            }
 
             // Update Total Row in Footer
             tableFooter.innerHTML = '';
