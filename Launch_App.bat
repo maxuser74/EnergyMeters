@@ -1,0 +1,13 @@
+@echo off
+cd /d "%~dp0"
+
+echo Killing process accessing port 3000...
+for /f "tokens=5" %%a in ('netstat -aon ^| find ":3000" ^| find "LISTENING"') do taskkill /f /pid %%a >nul 2>&1
+
+echo Starting Energy Meters Server...
+start "Energy Meters Server" npx nodemon --watch web_datalogger.js --watch public --ext js,html,css web_datalogger.js
+echo Waiting for server to initialize...
+timeout /t 3 /nobreak >nul
+echo Opening Browser...
+start http://localhost:3000
+exit

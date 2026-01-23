@@ -1,0 +1,1430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Energy Meters Logger</title>
+    <script src="/vendor/chart.umd.js"></script>
+    <script>
+        // Fallback to CDN only if local vendor copy is not available
+        if (typeof Chart === 'undefined') {
+            const fallback = document.createElement('script');
+            fallback.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+            document.head.appendChild(fallback);
+        }
+    </script>
+    <style>
+        body {
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-sizing: border-box;
+        }
+        h1 {
+            color: #4ec9b0;
+            text-align: center;
+        }
+        .status-bar {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #9cdcfe;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 0;
+            background-color: #252526;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+        th, td {
+            padding: 4px 8px;
+            text-align: left;
+            border-bottom: 1px solid #3e3e42;
+            font-size: 0.9em;
+        }
+        th {
+            background-color: #333333;
+            color: #569cd6;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.4);
+            white-space: nowrap;
+        }
+        /* Machine Column */
+        td:nth-child(2) {
+             max-width: 250px; /* Increased from default */
+             white-space: nowrap;
+             overflow: hidden;
+             text-overflow: ellipsis;
+        }
+        /* Group Columns */
+        td:nth-child(3), td:nth-child(4) { 
+             max-width: 100px;
+             white-space: nowrap;
+             overflow: hidden;
+             text-overflow: ellipsis;
+        }
+        tfoot {
+            position: sticky;
+            bottom: 0;
+            z-index: 10;
+        }
+        tfoot td {
+            background-color: #333333;
+            border-top: 2px solid #4ec9b0;
+            box-shadow: 0 -4px 4px -2px rgba(0, 0, 0, 0.4);
+            font-weight: bold;
+        }
+        tr:hover {
+            background-color: #2d2d30;
+        }
+        .status-ok { color: #4caf50; }
+        .status-error { color: #f44336; }
+        .status-reading { color: #ffeb3b; }
+        .status-pending { color: #808080; }
+        
+        .val-cell {
+            font-family: 'Consolas', 'Courier New', monospace;
+            text-align: right;
+        }
+
+        .select-radio {
+            width: 16px;
+            height: 16px;
+            border: 2px solid #4ec9b0;
+            border-radius: 50%;
+            background: transparent;
+            cursor: pointer;
+            appearance: none;
+            -webkit-appearance: none;
+            position: relative;
+        }
+
+        .select-radio:checked::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 8px;
+            height: 8px;
+            background-color: #4ec9b0;
+            border-radius: 50%;
+        }
+        
+        /* Modal Styles */
+        .modal {
+            display: none; 
+            position: fixed; 
+            z-index: 1; 
+            left: 0;
+            top: 0;
+            width: 100%; 
+            height: 100%; 
+            overflow: auto; 
+            background-color: rgba(0,0,0,0.8); 
+        }
+        .modal-content {
+            background-color: #252526;
+            margin: 10% auto; 
+            padding: 20px;
+            border: 1px solid #3e3e42;
+            width: 50%; 
+            color: #d4d4d4;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+        .file-list {
+            list-style-type: none;
+            padding: 0;
+        }
+        .file-list li {
+            padding: 15px;
+            border-bottom: 1px solid #3e3e42;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .file-list li:hover {
+            background-color: #37373d;
+            color: #4ec9b0;
+        }
+        .file-list li:last-child {
+            border-bottom: none;
+        }
+        .btn-change {
+            background-color: #0e639c;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .btn-change:hover {
+            background-color: #1177bb;
+        }
+        .btn-pause {
+            background-color: #d4d4d4;
+            color: #1e1e1e;
+            border: none;
+            padding: 8px 16px;
+            cursor: pointer;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .btn-pause.paused {
+            background-color: #ffeb3b;
+            color: #000;
+        }
+        .btn-cancel {
+            background-color: #3e3e42;
+            color: #d4d4d4;
+            border: none;
+            padding: 8px 16px;
+            cursor: pointer;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .btn-cancel:hover {
+            background-color: #505055;
+        }
+        .close-modal {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .close-modal:hover {
+            color: white;
+        }
+        .about-content {
+            text-align: center;
+        }
+        .about-content h2 {
+            color: #4ec9b0;
+        }
+        .about-content p {
+            font-size: 1.2em;
+            margin: 10px 0;
+        }
+
+        /* Detail Modal Styles */
+        .detail-modal-content {
+            background-color: #1e1e1e;
+            margin: 2% auto;
+            padding: 20px;
+            border: 1px solid #3e3e42;
+            width: 90%;
+            height: 90%;
+            color: #d4d4d4;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+
+        .badges-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .badges-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            width: 100%;
+        }
+
+        .badge-group {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .badge-group-title {
+            font-size: 0.85em;
+            color: #888;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            border-bottom: 1px solid #3e3e42;
+            padding-bottom: 4px;
+            padding-left: 5px;
+        }
+
+        .badge-group-items {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .badge-card {
+            background-color: #2d2d30;
+            border: 1px solid #3e3e42;
+            border-radius: 5px;
+            padding: 10px;
+            min-width: 100px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .badge-card.type-A { border-top: 12px solid #4ec9b0; }
+        .badge-card.type-V-LN { border-top: 12px solid #ce9178; }
+        .badge-card.type-V-LL { border-top: 12px solid #c586c0; }
+        .badge-card.type-PF { border-top: 12px solid #dcdcaa; }
+        .badge-card.type-kW { border-top: 12px solid #569cd6; }
+        .badge-card.type-kW { min-width: 160px; }
+        .badge-card.type-kW .badge-title { font-size: 0.95em; }
+        .badge-card.type-kW .badge-value { font-size: 1.45em; }
+
+        .badge-title {
+            font-size: 0.8em;
+            color: #9cdcfe;
+            margin-bottom: 5px;
+        }
+
+        .badge-value {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #fff;
+        }
+
+        .charts-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+            flex: 1;
+        }
+
+        .chart-wrapper {
+            background-color: #252526;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #3e3e42;
+            min-height: 300px;
+        }
+    </style>
+</head>
+<body>
+    <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 20px; margin-bottom: 20px; border-bottom: 1px solid #333; padding-bottom: 15px;">
+        <div style="display: flex; flex-direction: column; gap: 10px; flex: 1; min-width: 300px;">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 15px;">
+                <h1 style="margin: 0;">Energy Meters Live View</h1>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button id="btnPause" class="btn-pause" onclick="togglePause()">Pause</button>
+                    <button class="btn-change" style="background-color: #333;" onclick="showAbout()">About</button>
+                    <button class="btn-change" onclick="goToGrafici()">Grafici</button>
+                </div>
+            </div>
+            <div class="status-bar" id="statusBar" style="text-align: left; margin: 0; padding: 0;">Connecting...</div>
+        </div>
+        
+        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
+            <label style="color: #d4d4d4; cursor: pointer; font-size: 1.1em;">
+                <input type="checkbox" id="showTotalKw" onchange="renderTableFromCache()"> Show Total kW
+            </label>
+            <div style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px; max-width: 600px;">
+                <label style="color: #d4d4d4; cursor: pointer;">
+                    <input type="radio" name="currentFilter" value="all" checked onchange="handleFilterChange(); renderTableFromCache()"> All
+                </label>
+                <label style="color: #d4d4d4; cursor: pointer;">
+                    <input type="radio" name="currentFilter" value="high" onchange="handleFilterChange(); renderTableFromCache()"> > 5A
+                </label>
+                <label style="color: #d4d4d4; cursor: pointer;">
+                    <input type="radio" name="currentFilter" value="high20" onchange="handleFilterChange(); renderTableFromCache()"> > 20A
+                </label>
+                <label style="color: #d4d4d4; cursor: pointer;">
+                    <input type="radio" name="currentFilter" value="high40" onchange="handleFilterChange(); renderTableFromCache()"> > 40A
+                </label>
+                <label style="color: #d4d4d4; cursor: pointer;">
+                    <input type="checkbox" id="showErrors" onchange="handleFilterChange(); renderTableFromCache()"> Phase Errors
+                </label>
+                <label style="color: #d4d4d4; cursor: pointer;">
+                    <input type="checkbox" id="showSelected" onchange="handleFilterChange(); renderTableFromCache()"> Selected
+                </label>
+                <label style="color: #d4d4d4; cursor: pointer;">
+                    <input type="checkbox" id="groupPhases" onchange="handleFilterChange(); renderTableFromCache()"> Group Phases
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div id="filtersContainer" style="background-color: #252526; padding: 10px; margin-bottom: 20px; border-radius: 4px; border: 1px solid #3e3e42; display: none;">
+        <div style="margin-bottom: 8px;">
+            <strong style="color: #569cd6; margin-right: 10px;">Group1:</strong>
+            <span id="group1Filters"></span>
+        </div>
+        <div>
+            <strong style="color: #569cd6; margin-right: 10px;">Group2:</strong>
+            <span id="group2Filters"></span>
+        </div>
+    </div>
+
+    <div id="tableContainer" style="overflow-y: auto; overflow-x: hidden; flex: 1;">
+        <table id="metersTable">
+            <thead>
+                <tr id="tableHeader">
+                    <th style="width: 60px;">Scan</th>
+                    <th>Machine</th>
+                    <th>Group1</th>
+                    <th>Group2</th>
+                    <th>Location</th>
+                    <th>Status</th>
+                    <!-- Dynamic headers will go here -->
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+                <!-- Rows will go here -->
+            </tbody>
+            <tfoot id="tableFooter">
+            </tfoot>
+        </table>
+    </div>
+
+    <!-- File Selection Modal -->
+    <div id="fileModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeFileModal()">&times;</span>
+            <h2 style="color: #4ec9b0; margin-top: 0;">Select Configuration File</h2>
+            <p>Please select a file to start reading:</p>
+            <ul id="fileList" class="file-list">
+                <!-- Files will be populated here -->
+                <li>Loading...</li>
+            </ul>
+            <button class="btn-cancel" onclick="closeFileModal()">Cancel</button>
+        </div>
+    </div>
+
+    <!-- About Modal -->
+    <div id="aboutModal" class="modal">
+        <div class="modal-content about-content">
+            <span class="close-modal" onclick="closeAboutModal()">&times;</span>
+            <h2>About</h2>
+            <p><strong>Massimiliano Passeri</strong></p>
+            <p>Fonderie Mora Gavardo</p>
+            <br>
+            <p style="font-size: 0.9em; color: #888;">Energy Meters Web Datalogger v1.0</p>
+        </div>
+    </div>
+
+    <!-- Detail Modal -->
+    <div id="detailModal" class="modal">
+        <div class="modal-content detail-modal-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #3e3e42; padding-bottom: 10px;">
+                <h2 id="detailTitle" style="margin: 0; color: #4ec9b0;">Machine Details</h2>
+                <span class="close-modal" onclick="closeDetailModal()">&times;</span>
+            </div>
+            
+            <div id="detailBadges" class="badges-container">
+                <!-- Badges will be injected here -->
+            </div>
+
+            <div class="charts-container">
+                <div class="chart-wrapper">
+                    <canvas id="chartA"></canvas>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="chartkW"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const statusBar = document.getElementById('statusBar');
+        const tableFooter = document.getElementById('tableFooter');
+        const tableHeader = document.getElementById('tableHeader');
+        const tableBody = document.getElementById('tableBody');
+        const fileModal = document.getElementById('fileModal');
+        const fileList = document.getElementById('fileList');
+        const aboutModal = document.getElementById('aboutModal');
+        const btnPause = document.getElementById('btnPause');
+        const filtersContainer = document.getElementById('filtersContainer');
+        const group1FiltersSpan = document.getElementById('group1Filters');
+        const group2FiltersSpan = document.getElementById('group2Filters');
+        const detailModal = document.getElementById('detailModal');
+        const detailTitle = document.getElementById('detailTitle');
+        const detailBadges = document.getElementById('detailBadges');
+        const showSelectedCheckbox = document.getElementById('showSelected');
+        
+        const clientHistory = {};
+        const MAX_CLIENT_HISTORY = 120;
+        let currentRegisters = [];
+        let serverStartTime = null;
+        let lastAvailableFilters = null;
+        let lastData = null;
+        const selectedMachines = new Set();
+        const GRAFICI_CACHE_KEY = 'graficiVisibleUtilities';
+        let lastVisibleUtilities = [];
+        
+        // Detail View State
+        let currentDetailId = null;
+        let charts = { A: null, kW: null };
+
+        function renderTableFromCache() {
+            if (lastData) {
+                updateHeaders(lastData.registers);
+                updateTable(lastData.utilities, lastData.registers, lastData.latestResults, lastData.config);
+            }
+        }
+
+        function cacheGraficiSelection() {
+            if (!lastVisibleUtilities || lastVisibleUtilities.length === 0) return;
+            try {
+                const payload = {
+                    timestamp: Date.now(),
+                    utilities: lastVisibleUtilities
+                };
+                localStorage.setItem(GRAFICI_CACHE_KEY, JSON.stringify(payload));
+            } catch (err) {
+                console.warn('Unable to cache grafici selection', err);
+            }
+        }
+
+        function goToGrafici() {
+            cacheGraficiSelection();
+            window.location.href = '/grafici.html';
+        }
+
+        function showFileSelection() {
+            fileModal.style.display = "block";
+            fileList.innerHTML = '<li>Loading...</li>';
+            socket.emit('getFiles');
+        }
+
+        function closeFileModal() {
+            fileModal.style.display = "none";
+        }
+
+        function showAbout() {
+            aboutModal.style.display = "block";
+        }
+
+        function closeAboutModal() {
+            aboutModal.style.display = "none";
+        }
+
+        function openDetail(utilId) {
+            currentDetailId = utilId;
+            const util = lastData.utilities.find(u => u.id === utilId);
+            if (util) {
+                detailTitle.textContent = `${util.name} (C${util.cabinet} N${util.node})`;
+            }
+            detailModal.style.display = "block";
+            
+            // Request history
+            socket.emit('getHistory', utilId);
+            
+            // Render current values immediately
+            if (lastData && lastData.latestResults[utilId]) {
+                updateDetailBadges(lastData.latestResults[utilId], lastData.registers, lastData.config);
+            }
+            
+            initCharts();
+            if (clientHistory[utilId] && clientHistory[utilId].length && lastData) {
+                updateCharts(clientHistory[utilId], lastData.registers);
+            }
+        }
+
+        function closeDetailModal() {
+            detailModal.style.display = "none";
+            currentDetailId = null;
+        }
+
+        function initCharts() {
+            if (typeof Chart === 'undefined') {
+                console.error('Chart.js not loaded; charts cannot be rendered.');
+                return;
+            }
+
+            const commonOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                scales: {
+                    x: {
+                        type: 'category',
+                        display: true,
+                        title: {
+                            display: true,
+                            text: 'Time',
+                            color: '#888'
+                        },
+                        ticks: { 
+                            color: '#d4d4d4',
+                            maxRotation: 0,
+                            autoSkip: true,
+                            maxTicksLimit: 10
+                        },
+                        grid: { color: '#333' }
+                    },
+                    y: {
+                        display: true,
+                        beginAtZero: false, // Adapt to readings
+                        grace: '5%', // Add some padding
+                        ticks: { color: '#d4d4d4' },
+                        grid: { color: '#333' }
+                    }
+                },
+                plugins: {
+                    legend: { labels: { color: '#d4d4d4' } },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false
+                    }
+                }
+            };
+
+            if (!charts.A) {
+                charts.A = new Chart(document.getElementById('chartA'), {
+                    type: 'line',
+                    data: { labels: [], datasets: [] },
+                    options: { ...commonOptions, plugins: { ...commonOptions.plugins, title: { display: true, text: 'Current (A)', color: '#d4d4d4' } } }
+                });
+            }
+            if (!charts.kW) {
+                charts.kW = new Chart(document.getElementById('chartkW'), {
+                    type: 'line',
+                    data: { labels: [], datasets: [] },
+                    options: { 
+                        ...commonOptions, 
+                        scales: { 
+                            ...commonOptions.scales, 
+                            y: { 
+                                ...commonOptions.scales.y, 
+                                beginAtZero: true, 
+                                min: 0 
+                            } 
+                        },
+                        plugins: { ...commonOptions.plugins, title: { display: true, text: 'Power (kW)', color: '#d4d4d4' } } 
+                    }
+                });
+            }
+        }
+
+        function updateDetailBadges(result, registers, config) {
+            detailBadges.innerHTML = '';
+            if (!result || !result.values) return;
+
+            // Define Groups with Row assignment
+            const groups = [
+                { id: 'current', title: 'Currents', check: r => r.label.includes('A L') || r.label.includes('Current'), row: 1 },
+                { id: 'v_star', title: 'Voltages (L-N)', check: r => r.label.includes('L1-N') || r.label.includes('L2-N') || r.label.includes('L3-N'), row: 1 },
+                { id: 'v_triangle', title: 'Voltages (L-L)', check: r => r.label.includes('L1-L2') || r.label.includes('L2-L3') || r.label.includes('L3-L1'), row: 1 },
+                { id: 'pf', title: 'Power Factors', check: r => r.label.includes('PF'), row: 2 },
+                { id: 'power', title: 'Power', check: r => r.label === 'kW' || r.label === 'W' || r.label === 'Active Power W', row: 2 }
+            ];
+
+            // Helper to create badge
+            const createBadge = (reg, val) => {
+                const card = document.createElement('div');
+                card.className = 'badge-card';
+                
+                // Determine type for coloring
+                if (reg.label.includes('A L') || reg.label.includes('Current')) card.classList.add('type-A');
+                else if (reg.label.includes('L1-N') || reg.label.includes('L2-N') || reg.label.includes('L3-N')) card.classList.add('type-V-LN');
+                else if (reg.label.includes('L1-L2') || reg.label.includes('L2-L3') || reg.label.includes('L3-L1')) card.classList.add('type-V-LL');
+                else if (reg.label.includes('PF')) card.classList.add('type-PF');
+                else if (reg.label === 'kW') card.classList.add('type-kW');
+
+                const title = document.createElement('div');
+                title.className = 'badge-title';
+                title.textContent = reg.label;
+                
+                const valueDiv = document.createElement('div');
+                valueDiv.className = 'badge-value';
+                valueDiv.textContent = formatValue(val, reg.label, config);
+                
+                // Color coding for values (red if alarm)
+                if (reg.label.includes('PF') && val < (config.pf_red_max || 0.4)) valueDiv.style.color = '#ff5555';
+                
+                card.appendChild(title);
+                card.appendChild(valueDiv);
+                return card;
+            };
+
+            // Create Row Containers
+            const row1 = document.createElement('div');
+            row1.className = 'badges-row';
+            const row2 = document.createElement('div');
+            row2.className = 'badges-row';
+
+            const usedRegisters = new Set();
+
+            groups.forEach(group => {
+                const groupRegs = registers.filter(r => group.check(r));
+                if (groupRegs.length > 0) {
+                    const groupDiv = document.createElement('div');
+                    groupDiv.className = 'badge-group';
+                    
+                    const titleDiv = document.createElement('div');
+                    titleDiv.className = 'badge-group-title';
+                    titleDiv.textContent = group.title;
+                    groupDiv.appendChild(titleDiv);
+
+                    const itemsDiv = document.createElement('div');
+                    itemsDiv.className = 'badge-group-items';
+
+                    groupRegs.forEach(reg => {
+                        const val = result.values[reg.startAddress];
+                        if (val !== undefined) {
+                            itemsDiv.appendChild(createBadge(reg, val));
+                            usedRegisters.add(reg);
+                        }
+                    });
+
+                    if (itemsDiv.children.length > 0) {
+                        groupDiv.appendChild(itemsDiv);
+                        // Append to correct row
+                        if (group.row === 1) row1.appendChild(groupDiv);
+                        else row2.appendChild(groupDiv);
+                    }
+                }
+            });
+
+            // Append rows if they have children
+            if (row1.children.length > 0) detailBadges.appendChild(row1);
+            if (row2.children.length > 0) detailBadges.appendChild(row2);
+
+            // Render Others
+            const otherRegs = registers.filter(r => !usedRegisters.has(r));
+            if (otherRegs.length > 0) {
+                const rowOther = document.createElement('div');
+                rowOther.className = 'badges-row';
+
+                const groupDiv = document.createElement('div');
+                groupDiv.className = 'badge-group';
+                
+                const titleDiv = document.createElement('div');
+                titleDiv.className = 'badge-group-title';
+                titleDiv.textContent = 'Other';
+                groupDiv.appendChild(titleDiv);
+
+                const itemsDiv = document.createElement('div');
+                itemsDiv.className = 'badge-group-items';
+
+                otherRegs.forEach(reg => {
+                    const val = result.values[reg.startAddress];
+                    if (val !== undefined) {
+                        itemsDiv.appendChild(createBadge(reg, val));
+                    }
+                });
+
+                if (itemsDiv.children.length > 0) {
+                    groupDiv.appendChild(itemsDiv);
+                    rowOther.appendChild(groupDiv);
+                    detailBadges.appendChild(rowOther);
+                }
+            }
+        }
+
+        function pushClientHistory(utilId, result) {
+            if (!result || result.status !== 'OK' || !result.values) return;
+            if (!clientHistory[utilId]) clientHistory[utilId] = [];
+            clientHistory[utilId].push({
+                timestamp: Date.now(),
+                values: result.values
+            });
+            if (clientHistory[utilId].length > MAX_CLIENT_HISTORY) {
+                clientHistory[utilId].shift();
+            }
+        }
+
+        function updateCharts(historyData, registers) {
+            if (!Array.isArray(registers) || registers.length === 0) {
+                console.warn("No registers available for charting.");
+                return;
+            }
+            if (!historyData || historyData.length === 0) {
+                console.warn("No history data available.");
+                return;
+            }
+
+            // Debug: Check first point structure
+            const firstPoint = historyData[0];
+            if (firstPoint && firstPoint.values) {
+                console.log("First history point keys:", Object.keys(firstPoint.values));
+            }
+
+            const labels = historyData.map(h => new Date(h.timestamp).toLocaleTimeString());
+            
+            // Helper to create dataset
+            const createDataset = (label, color, data) => ({
+                label: label,
+                data: data,
+                borderColor: color,
+                backgroundColor: color,
+                borderWidth: 2,
+                pointRadius: 2,
+                pointHoverRadius: 4,
+                pointBackgroundColor: color,
+                fill: false,
+                tension: 0.4,
+                spanGaps: true
+            });
+
+            // Prepare Data Arrays
+            const datasetsA = [];
+            const datasetskW = [];
+
+            // Group registers by type
+            const regsA = registers.filter(r => r.label.includes('A L') || r.label.includes('Current'));
+            const regskW = registers.filter(r => r.label === 'kW' || r.label === 'W' || r.label === 'Active Power W');
+
+            // Colors
+            const colors = ['#4ec9b0', '#ce9178', '#dcdcaa'];
+
+            // Helper to safely extract value
+            const getValue = (h, reg) => {
+                if (!h.values) return null;
+                
+                // 1. Try direct access (number or string)
+                let val = h.values[reg.startAddress];
+                if (val === undefined) val = h.values[String(reg.startAddress)];
+                
+                // 2. Try finding key loosely
+                if (val === undefined) {
+                    const key = Object.keys(h.values).find(k => k == reg.startAddress);
+                    if (key) val = h.values[key];
+                }
+
+                return (val !== undefined && val !== null) ? parseFloat(val) : null;
+            };
+
+            // Populate A
+            regsA.forEach((reg, idx) => {
+                const data = historyData.map(h => getValue(h, reg));
+                // console.log(`Data for ${reg.label} (${reg.startAddress}):`, data);
+                datasetsA.push(createDataset(reg.label, colors[idx % colors.length], data));
+            });
+
+            // Populate kW
+            regskW.forEach((reg, idx) => {
+                const data = historyData.map(h => getValue(h, reg));
+                // console.log(`Data for ${reg.label} (${reg.startAddress}):`, data);
+                datasetskW.push(createDataset(reg.label, '#569cd6', data));
+            });
+
+            // Update Charts - Destroy and Recreate to ensure clean state if needed, 
+            // or just update data if instance exists. 
+            // For robustness, we'll update data.
+            
+            if (charts.A) {
+                charts.A.data.labels = labels;
+                charts.A.data.datasets = datasetsA;
+                charts.A.update();
+            }
+            if (charts.kW) {
+                charts.kW.data.labels = labels;
+                charts.kW.data.datasets = datasetskW;
+                charts.kW.update();
+            }
+        }
+
+        function togglePause() {
+            socket.emit('togglePause');
+        }
+
+        function renderFilters(available, active) {
+            const activeGrp1 = (active && active.group1) ? active.group1 : [];
+            const activeGrp2 = (active && active.group2) ? active.group2 : [];
+
+            // Check if options changed
+            const optionsChanged = !lastAvailableFilters || 
+                JSON.stringify(available) !== JSON.stringify(lastAvailableFilters);
+            
+            if (optionsChanged) {
+                lastAvailableFilters = available;
+
+                // Render Main Group1
+                group1FiltersSpan.innerHTML = '';
+                (available.group1 || []).forEach(grp => {
+                    const label = document.createElement('label');
+                    label.style.marginRight = '15px';
+                    label.style.cursor = 'pointer';
+                    
+                    const cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    cb.value = grp;
+                    cb.dataset.type = 'group1';
+                    cb.onchange = handleFilterChange;
+                    
+                    label.appendChild(cb);
+                    label.appendChild(document.createTextNode(` ${grp}`));
+                    group1FiltersSpan.appendChild(label);
+                });
+
+                // Render Auxiliary Group2
+                group2FiltersSpan.innerHTML = '';
+                (available.group2 || []).forEach(grp => {
+                    const label = document.createElement('label');
+                    label.style.marginRight = '15px';
+                    label.style.cursor = 'pointer';
+                    
+                    const cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    cb.value = grp;
+                    cb.dataset.type = 'group2';
+                    cb.onchange = handleFilterChange;
+                    
+                    label.appendChild(cb);
+                    label.appendChild(document.createTextNode(` ${grp}`));
+                    group2FiltersSpan.appendChild(label);
+                });
+            }
+
+            // Update Checked State
+            const grp1Checkboxes = group1FiltersSpan.querySelectorAll('input');
+            grp1Checkboxes.forEach(cb => {
+                cb.checked = activeGrp1.includes(cb.value);
+            });
+
+            const grp2Checkboxes = group2FiltersSpan.querySelectorAll('input');
+            grp2Checkboxes.forEach(cb => {
+                cb.checked = activeGrp2.includes(cb.value);
+            });
+        }
+
+        function handleFilterChange() {
+            const selectedGroup1 = Array.from(group1FiltersSpan.querySelectorAll('input:checked')).map(cb => cb.value);
+            const selectedGroup2 = Array.from(group2FiltersSpan.querySelectorAll('input:checked')).map(cb => cb.value);
+            
+            const currentFilterVal = document.querySelector('input[name="currentFilter"]:checked').value;
+            const filterErrors = document.getElementById('showErrors').checked;
+            const onlySelected = showSelectedCheckbox.checked;
+            const selectedList = Array.from(selectedMachines);
+
+            socket.emit('updateFilters', {
+                group1: selectedGroup1,
+                group2: selectedGroup2,
+                minCurrent: currentFilterVal,
+                onlyErrors: filterErrors,
+                selectedMachines: selectedList,
+                onlySelected
+            });
+        }
+
+        function handleSelectionChange(utilId, isChecked) {
+            if (isChecked) {
+                selectedMachines.add(utilId);
+            } else {
+                selectedMachines.delete(utilId);
+            }
+            handleFilterChange();
+            renderTableFromCache();
+        }
+
+        // Close modals when clicking outside
+        window.onclick = function(event) {
+            if (event.target == fileModal) {
+                fileModal.style.display = "none";
+            }
+            if (event.target == aboutModal) {
+                aboutModal.style.display = "none";
+            }
+            if (event.target == detailModal) {
+                closeDetailModal();
+            }
+        }
+
+        socket.on('connect', () => {
+            statusBar.textContent = 'Connected to server';
+            statusBar.style.color = '#4caf50';
+        });
+
+        socket.on('fileList', (files) => {
+            fileList.innerHTML = '';
+            if (files.length === 0) {
+                fileList.innerHTML = '<li style="cursor: default; color: #f44336;">No "Read_*.xlsx" files found.</li>';
+                // fileModal.style.display = "block"; // Don't auto-show error
+                return;
+            }
+
+            files.forEach(file => {
+                const li = document.createElement('li');
+                li.textContent = file.displayName;
+                li.onclick = () => {
+                    socket.emit('selectFile', file.filename);
+                    fileModal.style.display = "none";
+                    statusBar.textContent = `Loading ${file.displayName}...`;
+                };
+                fileList.appendChild(li);
+            });
+
+            // If we are not currently reading anything (table empty), show modal
+            // if (tableBody.children.length === 0) {
+            //    fileModal.style.display = "block";
+            // }
+        });
+
+        socket.on('historyData', (msg) => {
+            if (!msg || !msg.id) return;
+            if (Array.isArray(msg.data)) {
+                clientHistory[msg.id] = msg.data.slice(-MAX_CLIENT_HISTORY);
+            }
+            if (currentDetailId === msg.id && lastData) {
+                updateCharts(clientHistory[msg.id] || msg.data, lastData.registers);
+            }
+        });
+
+        socket.on('disconnect', () => {
+            statusBar.textContent = 'Disconnected';
+            statusBar.style.color = '#f44336';
+        });
+
+        window.addEventListener('beforeunload', cacheGraficiSelection);
+
+        socket.on('update', (data) => {
+            lastData = data;
+            const { utilities, registers, latestResults, config, startTime, isPaused, availableFilters, activeFilters } = data;
+
+            if (activeFilters) {
+                showSelectedCheckbox.checked = !!activeFilters.onlySelected;
+                if (Array.isArray(activeFilters.selectedMachines)) {
+                    selectedMachines.clear();
+                    activeFilters.selectedMachines.forEach(id => selectedMachines.add(id));
+                }
+            }
+            
+            // Auto-reload page if server restarted (e.g. code change)
+            if (serverStartTime === null) {
+                serverStartTime = startTime;
+            } else if (serverStartTime !== startTime) {
+                window.location.reload();
+            }
+
+            // Update Filters UI
+            if (availableFilters) {
+                filtersContainer.style.display = 'block';
+                renderFilters(availableFilters, activeFilters);
+            }
+
+            // Update Pause Button
+            if (isPaused) {
+                btnPause.textContent = "Resume";
+                btnPause.classList.add('paused');
+                statusBar.textContent = `Paused | Last Update: ${new Date().toLocaleTimeString()}`;
+                statusBar.style.color = '#ffeb3b';
+            } else {
+                btnPause.textContent = "Pause";
+                btnPause.classList.remove('paused');
+                statusBar.textContent = `Connected | Interval: ${config.measurement_interval_ms}ms | Last Update: ${new Date().toLocaleTimeString()}`;
+                statusBar.style.color = '#9cdcfe';
+            }
+
+            // Update headers if registers changed
+
+            // Update headers if registers changed
+            if (JSON.stringify(registers.map(r => r.label)) !== JSON.stringify(currentRegisters.map(r => r.label))) {
+                currentRegisters = registers;
+                updateHeaders(registers);
+            }
+
+            updateTable(utilities, registers, latestResults, config);
+
+            // Keep a lightweight client-side history so charts have data even if the server history is momentarily unavailable
+            utilities.forEach(util => {
+                pushClientHistory(util.id, latestResults[util.id]);
+            });
+
+            // Render filters
+            renderFilters(availableFilters, activeFilters);
+
+            // Update Detail View if open
+            if (currentDetailId && latestResults[currentDetailId]) {
+                updateDetailBadges(latestResults[currentDetailId], registers, config);
+                const localHistory = clientHistory[currentDetailId];
+                if (localHistory && localHistory.length) {
+                    updateCharts(localHistory, registers);
+                } else {
+                    socket.emit('getHistory', currentDetailId);
+                }
+            }
+
+            // Persist visible selection so Grafici can pick it up on navigation
+            cacheGraficiSelection();
+        });
+
+        function getDisplayColumns(registers) {
+            const groupPhases = document.getElementById('groupPhases').checked;
+            if (!groupPhases || !registers) {
+                return (registers || []).map(r => ({ type: 'single', label: r.label, register: r }));
+            }
+
+            const columns = [];
+            const handledIds = new Set();
+
+            registers.forEach(reg => {
+                if (handledIds.has(reg.startAddress)) return;
+
+                let isGroupMember = false;
+                let groupType = '';
+
+                // Identify group types
+                if (reg.label.match(/^A L[1-3]$/) || reg.label.includes('Current L')) groupType = 'A';
+                else if (reg.label.match(/^V L[1-3]-N$/) || (reg.label.includes('RMS star') && reg.label.includes('-N'))) groupType = 'V-LN';
+                else if (reg.label.match(/^V L[1-3]-L[1-3]$/) || (reg.label.includes('RMS line') && reg.label.includes('-L'))) groupType = 'V-LL';
+
+                // Specific check for labels from registri.csv (RMS star L1-N [V], etc won't match strict regex sometimes)
+                // The csv says: "RMS star L1-N [V]" named "V L1-N"
+                // The label comes from 'Convert to'? No, 'Title'. The csv has 'Title' as 'V L1-N'.
+                // So strict regex might fail if spaces differ.
+                // Let's be more robust.
+
+                if (groupType) {
+                    let peerRegs = [];
+                    if (groupType === 'A') {
+                        peerRegs = registers.filter(r => r.label.match(/^A L[1-3]$/) || r.label.includes('Current L'));
+                    } else if (groupType === 'V-LN') {
+                        peerRegs = registers.filter(r => r.label.match(/^V L[1-3]-N$/) || (r.label.includes('L') && r.label.includes('-N') && r.label.includes('V')));
+                    } else if (groupType === 'V-LL') {
+                        peerRegs = registers.filter(r => (r.label.match(/^V L[1-3]-L[1-3]$/) || (r.label.includes('L') && r.label.includes('-L') && r.label.includes('V'))) && !r.label.includes('-N'));
+                    }
+                    
+                    if (peerRegs.length > 1) {
+                         peerRegs.forEach(p => handledIds.add(p.startAddress));
+                         let label = groupType === 'A' ? 'A Avg' : (groupType === 'V-LN' ? 'V L-N Avg' : 'V L-L Avg');
+                         columns.push({ type: 'group', label: label, groupType: groupType, registers: peerRegs });
+                    } else {
+                        columns.push({ type: 'single', label: reg.label, register: reg });
+                        handledIds.add(reg.startAddress);
+                    }
+                } else {
+                    columns.push({ type: 'single', label: reg.label, register: reg });
+                    handledIds.add(reg.startAddress);
+                }
+            });
+
+            return columns;
+        }
+
+        function updateHeaders(registers) {
+            // Clear existing headers except first 6 (scan, machine, group1, group2, location, status)
+            while (tableHeader.children.length > 6) {
+                tableHeader.removeChild(tableHeader.lastChild);
+            }
+            
+            const cols = getDisplayColumns(registers);
+            cols.forEach(col => {
+                const th = document.createElement('th');
+                th.textContent = col.label;
+                tableHeader.appendChild(th);
+            });
+        }
+
+        function formatValue(val, label, config) {
+            let type = 'DEFAULT';
+            if (label.includes('V')) type = 'V';
+            else if (label.includes('A')) type = 'A';
+            else if (label.includes('PF')) type = 'PF';
+            else if (label === 'kW') type = 'kW';
+
+            const decimals = config[`decimals_${type}`] !== undefined ? config[`decimals_${type}`] : 2;
+            const integers = config[`integers_${type}`] !== undefined ? config[`integers_${type}`] : 0;
+            
+            let sign = val >= 0 ? ' ' : '-';
+            // if (type === 'PF') sign = val >= 0 ? '+' : '-';
+
+            let absVal = Math.abs(val).toFixed(decimals);
+            let parts = absVal.split('.');
+            let intPart = parts[0];
+            
+            if (integers > 0) {
+                intPart = intPart.padStart(integers, ' ');
+            }
+            
+            let decPart = parts[1] ? '.' + parts[1] : '';
+            
+            return `${sign}${intPart}${decPart}`;
+        }
+
+        function updateTable(utilities, registers, latestResults, config) {
+            tableBody.innerHTML = '';
+            let totalKw = 0;
+            const displayColumns = getDisplayColumns(registers);
+
+            lastVisibleUtilities = [];
+            
+            const currentFilterVal = document.querySelector('input[name="currentFilter"]:checked').value;
+            const filterErrors = document.getElementById('showErrors').checked;
+            const showSelectedOnly = showSelectedCheckbox.checked;
+
+            utilities.forEach(util => {
+                const res = latestResults[util.id] || {};
+
+                if (showSelectedOnly && !selectedMachines.has(util.id)) {
+                    return;
+                }
+                
+                // Filter by Current
+                if (currentFilterVal !== 'all') {
+                    let threshold = 5;
+                    if (currentFilterVal === 'high20') threshold = 20;
+                    if (currentFilterVal === 'high40') threshold = 40;
+
+                    let hasHighCurrent = false;
+                    // Check if any current register has value >= threshold
+                    registers.forEach(reg => {
+                        if (reg.label.includes('A L') || reg.label.includes('Current')) { // A L1, A L2, A L3
+                            const val = res.values ? res.values[reg.startAddress] : 0;
+                            if (val >= threshold) hasHighCurrent = true;
+                        }
+                    });
+                    
+                    // If we have data (status OK) and no high current, skip
+                    if (!hasHighCurrent) return;
+                }
+
+                // Filter by Phase Errors
+                if (filterErrors) {
+                    let hasError = false;
+                    registers.forEach(reg => {
+                        const val = res.values ? res.values[reg.startAddress] : null;
+                        if (val !== null && val !== undefined) {
+                            // Check PF
+                            if (reg.label.includes('PF')) {
+                                const redMax = config.pf_red_max !== undefined ? config.pf_red_max : 0.4;
+                                if (val < redMax) hasError = true;
+                            }
+                            // Check Voltage
+                            else if (reg.label.includes('V')) {
+                                let min, max;
+                                if (reg.label.includes('L1-L2') || reg.label.includes('L2-L3') || reg.label.includes('L3-L1')) {
+                                    min = config.v_ll_min !== undefined ? config.v_ll_min : 380;
+                                    max = config.v_ll_max !== undefined ? config.v_ll_max : 420;
+                                } else if (reg.label.includes('L1-N') || reg.label.includes('L2-N') || reg.label.includes('L3-N')) {
+                                    min = config.v_ln_min !== undefined ? config.v_ln_min : 210;
+                                    max = config.v_ln_max !== undefined ? config.v_ln_max : 250;
+                                }
+                                if (min !== undefined && max !== undefined) {
+                                    if (val < min || val > max) hasError = true;
+                                }
+                            }
+                            // Check Negative (General)
+                            else if (val < 0) {
+                                hasError = true;
+                            }
+                        }
+                    });
+                    
+                    if (!hasError) return;
+                }
+
+                lastVisibleUtilities.push({
+                    id: util.id,
+                    name: util.name,
+                    group1: util.group1 || util.group || 'Unknown',
+                    group2: util.group2 || '',
+                    cabinet: util.cabinet,
+                    node: util.node
+                });
+
+                const tr = document.createElement('tr');
+                tr.style.cursor = 'pointer';
+                tr.onclick = () => openDetail(util.id);
+
+                // Selection
+                const tdSelect = document.createElement('td');
+                const selector = document.createElement('input');
+                selector.type = 'checkbox';
+                selector.className = 'select-radio';
+                selector.checked = selectedMachines.has(util.id);
+                selector.title = 'Include this machine in scan';
+                selector.onclick = (e) => e.stopPropagation();
+                selector.onchange = (e) => handleSelectionChange(util.id, e.target.checked);
+                tdSelect.appendChild(selector);
+                tr.appendChild(tdSelect);
+                
+                // Machine
+                const tdName = document.createElement('td');
+                tdName.textContent = util.name;
+                tr.appendChild(tdName);
+
+                // Group
+                const tdGroup1 = document.createElement('td');
+                tdGroup1.textContent = util.group1 || util.group || 'Unknown';
+                tr.appendChild(tdGroup1);
+
+                const tdGroup2 = document.createElement('td');
+                tdGroup2.textContent = util.group2 || '-';
+                tr.appendChild(tdGroup2);
+
+                // Location
+                const tdLoc = document.createElement('td');
+                tdLoc.textContent = `C${util.cabinet} N${util.node}`;
+                tr.appendChild(tdLoc);
+
+                // Status
+                const status = res.status || 'PENDING';
+                const tdStatus = document.createElement('td');
+                
+                let icon = '?';
+                let className = 'status-pending';
+                
+                if (status === 'OK') { icon = '✔'; className = 'status-ok'; }
+                else if (status === 'READING') { icon = '↻'; className = 'status-reading'; }
+                else if (status === 'ERROR') { icon = '✖'; className = 'status-error'; }
+                
+                tdStatus.textContent = icon;
+                tdStatus.className = className;
+                if (status === 'ERROR' && res.error) {
+                    tdStatus.title = res.error;
+                }
+                tr.appendChild(tdStatus);
+
+                // Pre-calculate PF Alarm status for this row
+                let pfAlarm = false;
+                registers.forEach(reg => {
+                    if (reg.label.includes('PF')) {
+                        const val = res.values ? res.values[reg.startAddress] : null;
+                        if (val !== undefined && val !== null) {
+                            const redMax = config.pf_red_max !== undefined ? config.pf_red_max : 0.4;
+                            if (val < redMax) {
+                                pfAlarm = true;
+                            }
+                        }
+                    }
+                });
+
+                // Values
+                displayColumns.forEach(col => {
+                    const tdVal = document.createElement('td');
+                    tdVal.className = 'val-cell';
+                    
+                    if (col.type === 'single') {
+                        const reg = col.register;
+                        const val = res.values ? res.values[reg.startAddress] : null;
+                        
+                        if (reg.label === 'kW' && val !== null && val !== undefined) {
+                            totalKw += val;
+                        }
+
+                        if (val !== null && val !== undefined) {
+                            tdVal.textContent = formatValue(val, reg.label, config);
+                            
+                            // Special coloring for PF
+                            if (reg.label.includes('PF')) {
+                                const redMax = config.pf_red_max !== undefined ? config.pf_red_max : 0.4;
+                                const yellowMax = config.pf_yellow_max !== undefined ? config.pf_yellow_max : 0.7;
+                                
+                                if (val < redMax) tdVal.style.color = '#ff5555';
+                                else if (val < yellowMax) tdVal.style.color = '#ffeb3b';
+                                else tdVal.style.color = '#4caf50';
+                            }
+                            // Special coloring for Voltages
+                            else if (reg.label.includes('V')) {
+                                let min, max;
+                                if (reg.label.includes('L1-L2') || reg.label.includes('L2-L3') || reg.label.includes('L3-L1')) {
+                                    min = config.v_ll_min !== undefined ? config.v_ll_min : 380;
+                                    max = config.v_ll_max !== undefined ? config.v_ll_max : 420;
+                                } else if (reg.label.includes('L1-N') || reg.label.includes('L2-N') || reg.label.includes('L3-N')) {
+                                    min = config.v_ln_min !== undefined ? config.v_ln_min : 210;
+                                    max = config.v_ln_max !== undefined ? config.v_ln_max : 250;
+                                }
+                                if (min !== undefined && max !== undefined) {
+                                    if (val < min || val > max) tdVal.style.color = '#ff5555';
+                                }
+                            }
+                            // Special coloring for kW if PF is bad
+                            else if (reg.label === 'kW' && pfAlarm) {
+                                tdVal.style.color = '#ff5555';
+                            }
+                            // Default negative check for others
+                            else if (val < 0) {
+                                tdVal.style.color = '#ff5555';
+                            }
+                        } else {
+                            tdVal.textContent = '-';
+                            tdVal.style.color = '#555';
+                        }
+                    } else {
+                        // Grouped - Average
+                        let sum = 0;
+                        let count = 0;
+                        let anyVal = false;
+                        
+                        col.registers.forEach(r => {
+                            const v = res.values ? res.values[r.startAddress] : null;
+                            if (v !== null && v !== undefined) {
+                                sum += v;
+                                count++;
+                                anyVal = true;
+                            }
+                        });
+
+                        if (anyVal && count > 0) {
+                            const avg = sum / count;
+                            tdVal.textContent = formatValue(avg, col.label, config);
+                            
+                            // Basic color logic for average
+                            if (col.groupType.includes('V')) {
+                                let min, max;
+                                if (col.groupType === 'V-LL') {
+                                    min = config.v_ll_min !== undefined ? config.v_ll_min : 380;
+                                    max = config.v_ll_max !== undefined ? config.v_ll_max : 420;
+                                } else {
+                                    min = config.v_ln_min !== undefined ? config.v_ln_min : 210;
+                                    max = config.v_ln_max !== undefined ? config.v_ln_max : 250;
+                                }
+                                if (min !== undefined && max !== undefined) {
+                                    if (avg < min || avg > max) tdVal.style.color = '#ff5555';
+                                }
+                            }
+                        } else {
+                            tdVal.textContent = '-';
+                            tdVal.style.color = '#555';
+                        }
+                    }
+                    tr.appendChild(tdVal);
+                });
+
+                tableBody.appendChild(tr);
+            });
+
+            // Update Total Row in Footer
+            tableFooter.innerHTML = '';
+            if (document.getElementById('showTotalKw').checked) {
+                const tr = document.createElement('tr');
+                
+                tr.appendChild(document.createElement('td')); // Selection column
+                
+                const tdName = document.createElement('td');
+                tdName.textContent = 'TOTAL';
+                tdName.style.color = '#4ec9b0';
+                tr.appendChild(tdName);
+                
+                tr.appendChild(document.createElement('td')); // Group1
+                tr.appendChild(document.createElement('td')); // Group2
+                tr.appendChild(document.createElement('td')); // Location
+                tr.appendChild(document.createElement('td')); // Status
+                
+                displayColumns.forEach(col => {
+                    const td = document.createElement('td');
+                    td.className = 'val-cell';
+                    if (col.type === 'single' && col.register.label === 'kW') {
+                        td.textContent = formatValue(totalKw, 'kW', config);
+                        td.style.color = '#4ec9b0';
+                    }
+                    tr.appendChild(td);
+                });
+                tableFooter.appendChild(tr);
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grafici gruppi</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/graph-palette.css">
+    <script src="/vendor/chart.umd.js"></script>
+    <script>
+        if (typeof Chart === 'undefined') {
+            const fallback = document.createElement('script');
+            fallback.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+            document.head.appendChild(fallback);
+        }
+    </script>
+    <style>
+        :root {
+            --bg: #0c1218;
+            --panel: #111a22;
+            --card: #15212c;
+            --accent: #7dd3fc;
+            --accent-2: #a78bfa;
+            --muted: #7a8b9b;
+            --text: #e7eef5;
+            --border: #1f2c38;
+        }
+        * { box-sizing: border-box; }
+        html, body {
+            height: 100%;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            background: radial-gradient(circle at 25% 20%, rgba(127, 219, 255, 0.05), transparent 35%),
+                        radial-gradient(circle at 80% 0%, rgba(167, 139, 250, 0.08), transparent 30%),
+                        var(--bg);
+            color: var(--text);
+            font-family: 'Space Grotesk', 'Segoe UI', Tahoma, sans-serif;
+            min-height: 100vh;
+        }
+        .page {
+            width: 100%;
+            max-width: none;
+            margin: 0;
+            padding: 16px 14px 22px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .content {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            flex: 1 1 auto;
+            min-height: 0;
+        }
+        .top-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .title-wrap {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .eyebrow {
+            font-size: 12px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+        h1 {
+            margin: 0;
+            font-size: 30px;
+            font-weight: 600;
+            color: var(--text);
+        }
+        .subtitle {
+            margin: 0;
+            color: var(--muted);
+            font-size: 14px;
+        }
+        .status-box {
+            background: linear-gradient(120deg, rgba(125, 211, 252, 0.15), rgba(167, 139, 250, 0.12));
+            border: 1px solid var(--border);
+            padding: 12px 16px;
+            border-radius: 10px;
+            min-width: 220px;
+        }
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text);
+            text-decoration: none;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .back-link:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+        .status-main {
+            font-weight: 600;
+            font-size: 15px;
+        }
+        .status-meta {
+            color: var(--muted);
+            font-size: 12px;
+            margin-top: 4px;
+        }
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 16px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+            flex: 1 1 38vh;
+            min-height: 200px;
+            overflow: auto;
+        }
+        .single-row-badges .panel {
+            flex: 0 0 auto;
+            padding-bottom: 8px;
+        }
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 12px;
+        }
+        .control {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        label {
+            font-size: 13px;
+            color: var(--muted);
+        }
+        select {
+            background: var(--card);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 10px 12px;
+            font-size: 14px;
+            outline: none;
+        }
+        .pill-wrap {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .pill {
+            border: 1px solid var(--border);
+            background: var(--card);
+            color: var(--text);
+            padding: 8px 10px;
+            border-radius: 999px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .pill.active {
+            border-color: rgba(125, 211, 252, 0.5);
+            box-shadow: 0 0 0 2px rgba(125, 211, 252, 0.15);
+            background: linear-gradient(120deg, rgba(125, 211, 252, 0.12), rgba(167, 139, 250, 0.08));
+        }
+        .pill small {
+            color: var(--muted);
+            margin-left: 6px;
+        }
+        .chart-card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 16px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+            flex: 1 1 50vh;
+            min-height: 260px;
+            display: flex;
+            flex-direction: column;
+        }
+        .single-row-badges .chart-card {
+            flex: 1 1 60vh;
+            min-height: 320px;
+        }
+        #groupChart {
+            width: 100%;
+            height: 55vh;
+            max-height: 70vh;
+            min-height: 260px;
+            display: block;
+        }
+        .chart-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+        .chart-title {
+            font-weight: 600;
+            font-size: 16px;
+        }
+        .chart-subtitle {
+            color: var(--muted);
+            font-size: 13px;
+        }
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 12px;
+        }
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px 14px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .card.inactive {
+            opacity: 0.5;
+            border-color: #2a3744;
+        }
+        .card h3 {
+            margin: 0;
+            font-size: 14px;
+            color: var(--text);
+        }
+        .card small {
+            color: var(--muted);
+        }
+        .value {
+            font-size: 22px;
+            font-weight: 600;
+            margin-top: 8px;
+            color: var(--accent);
+        }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 11px;
+            background: rgba(125, 211, 252, 0.08);
+            color: var(--accent);
+            border: 1px solid var(--accent);
+            margin-left: 6px;
+        }
+        .empty {
+            color: var(--muted);
+            font-size: 14px;
+            text-align: center;
+            padding: 20px 0;
+        }
+        @media (min-width: 700px) {
+            .controls {
+                grid-template-columns: 280px 1fr;
+                align-items: flex-end;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <div class="top-bar">
+            <div class="title-wrap">
+                <h1 style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                    Grafici gruppi:
+                    <span id="groupLabel">Compressori</span>
+                    <select id="groupSelect" style="background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; outline: none; min-width: 180px;"></select>
+                    <a class="back-link" href="/index.html">&#8592; Torna alla dashboard</a>
+                </h1>
+            </div>
+            <div class="status-box">
+                <div id="statusText" class="status-main">Connecting...</div>
+                <div id="statusMeta" class="status-meta">waiting for data</div>
+            </div>
+        </div>
+
+        <div class="content">
+            <div class="chart-card">
+                <div class="chart-head">
+                    <div>
+                        <div class="chart-title">Power consumption</div>
+                        <div class="chart-subtitle">kW over the last minutes</div>
+                    </div>
+                    <div class="chart-subtitle" id="sampleInfo"></div>
+                </div>
+                <canvas id="groupChart"></canvas>
+            </div>
+
+            <div class="panel" id="readingsPanel">
+                <div class="chart-head" style="margin-bottom: 12px; cursor: pointer; user-select: none;" onclick="toggleReadings()">
+                    <div class="chart-title" style="display: flex; align-items: center; gap: 8px;">
+                        Latest readings
+                        <svg id="collapseIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition: transform 0.2s;"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <button class="pill" style="padding: 6px 14px; font-size: 12px; height: auto; font-weight: 500;" onclick="event.stopPropagation(); toggleAllNodes()">Seleziona/Deseleziona tutti</button>
+                        <div class="chart-subtitle">Live values from the selected group</div>
+                    </div>
+                </div>
+                <div id="cardsContainer">
+                    <div id="cards" class="cards"></div>
+                    <div id="emptyState" class="empty" style="display:none;">No machines found for this group.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const GRAFICI_CACHE_KEY = 'graficiVisibleUtilities';
+        function loadStoredSelection() {
+            try {
+                const raw = localStorage.getItem(GRAFICI_CACHE_KEY);
+                if (!raw) return { ids: new Set(), groups: [], raw: [] };
+                const parsed = JSON.parse(raw);
+                const list = Array.isArray(parsed.utilities) ? parsed.utilities : [];
+                const ids = new Set(list.map(u => u.id));
+                const groups = [...new Set(list.map(u => u.group1 || u.group).filter(Boolean))];
+                return { ids, groups, raw: list };
+            } catch (e) {
+                console.warn('Unable to load cached grafici selection', e);
+                return { ids: new Set(), groups: [], raw: [] };
+            }
+        }
+
+        const persistedSelection = loadStoredSelection();
+        const DEFAULT_GROUP = 'All';
+        const MAX_POINTS = 480;
+        let CHART_HEIGHT = 280;
+        const TOTAL_STACK_ID = 'TOTAL_STACK';
+        let gradientPairs = [];
+        let TOTAL_COLOR_INDEX = 0;
+
+        function hexToRgba(hex, alpha) {
+            if (!hex || typeof hex !== 'string') return '';
+            const h = hex.replace('#', '');
+            if (h.length !== 6) return '';
+            const num = parseInt(h, 16);
+            const r = (num >> 16) & 255;
+            const g = (num >> 8) & 255;
+            const b = num & 255;
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        }
+
+        function buildPalette() {
+            const styles = getComputedStyle(document.documentElement);
+            const pairs = [];
+            for (let i = 1; i <= 12; i++) {
+                const base = styles.getPropertyValue(`--graph-color-${i}`).trim();
+                const strong = styles.getPropertyValue(`--graph-color-${i}-strong`).trim();
+                if (base) {
+                    pairs.push([base, strong || base]);
+                }
+            }
+            if (pairs.length) return pairs;
+            // Fallback palette if CSS variables are missing
+            return [
+                ['#4cc9f0', '#1d9bf0'],
+                ['#f72585', '#b5179e'],
+                ['#ffd166', '#f59e0b'],
+                ['#06d6a0', '#059669'],
+                ['#9b5de5', '#7c3aed'],
+                ['#ef476f', '#e11d48'],
+                ['#118ab2', '#0ea5e9'],
+                ['#4ade80', '#16a34a'],
+                ['#f97316', '#c2410c'],
+                ['#c7f464', '#84cc16'],
+                ['#5eead4', '#0d9488'],
+                ['#e879f9', '#c026d3']
+            ];
+        }
+
+        function initPalette() {
+            gradientPairs = buildPalette();
+            TOTAL_COLOR_INDEX = gradientPairs.length - 1;
+        }
+
+        function getLineSolidColor(idx) {
+            const pair = gradientPairs[idx % gradientPairs.length];
+            return pair[1] || pair[0];
+        }
+
+        function getLineGradient(idx, ctx, height) {
+            if (!ctx) return getLineSolidColor(idx);
+            const g = ctx.createLinearGradient(0, 0, 0, height);
+            const pair = gradientPairs[idx % gradientPairs.length];
+            g.addColorStop(0, pair[0]);
+            g.addColorStop(1, pair[1] || pair[0]);
+            return g;
+        }
+
+        initPalette();
+
+        const socket = io();
+        const state = {
+            group: DEFAULT_GROUP,
+            utilities: [],
+            registers: [],
+            powerRegister: null,
+            timeline: [],
+            history: {},
+            selected: new Set(),
+            chart: null,
+            selectionInitialized: false
+        };
+
+        const els = {
+            groupSelect: document.getElementById('groupSelect'),
+            groupLabel: document.getElementById('groupLabel'),
+            statusText: document.getElementById('statusText'),
+            statusMeta: document.getElementById('statusMeta'),
+            cards: document.getElementById('cards'),
+            empty: document.getElementById('emptyState'),
+            sampleInfo: document.getElementById('sampleInfo')
+        };
+        els.groupLabel.textContent = state.group;
+
+        function formatKw(value) {
+            if (value === null || value === undefined || isNaN(value)) return '-';
+            return `${value.toFixed(2)} kW`;
+        }
+
+        function setStatus(text, meta) {
+            els.statusText.textContent = text;
+            els.statusMeta.textContent = meta || '';
+        }
+
+        function findPowerRegister(registers) {
+            return registers.find(r => r.label === 'kW' || r.label === 'W' || r.label === 'Active Power W') || null;
+        }
+
+        function normalizeUtilities(list) {
+            return (list || []).map(u => ({
+                ...u,
+                group: u.group || u.group1 || u.group2 || 'Unknown'
+            }));
+        }
+
+        function ensureHistory(utilId) {
+            if (!state.history[utilId]) {
+                state.history[utilId] = [];
+            }
+            // Pad to current timeline length for alignment
+            while (state.history[utilId].length < state.timeline.length - 1) {
+                state.history[utilId].push(null);
+            }
+            return state.history[utilId];
+        }
+
+        function pushDataForGroup(latestResults) {
+            if (!state.utilities.length || !state.powerRegister) return;
+            const now = Date.now();
+            state.timeline.push(now);
+            if (state.timeline.length > MAX_POINTS) {
+                state.timeline.shift();
+                Object.values(state.history).forEach(arr => arr.shift());
+            }
+
+            state.utilities.forEach(util => {
+                const arr = ensureHistory(util.id);
+                const res = latestResults[util.id];
+                const val = res && res.values ? res.values[state.powerRegister.startAddress] : null;
+                arr.push(val !== undefined ? val : null);
+                if (arr.length > state.timeline.length) arr.shift();
+            });
+
+            els.sampleInfo.textContent = `${state.timeline.length} samples`;
+        }
+
+        function buildChart() {
+            if (state.chart || typeof Chart === 'undefined') return;
+            const canvas = document.getElementById('groupChart');
+            const ctx = canvas.getContext('2d');
+            state.chart = new Chart(ctx, {
+                type: 'line',
+                data: { labels: [], datasets: [] },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        x: { ticks: { color: '#9fb1c3' }, grid: { color: '#1f2c38' }, stacked: false },
+                        y: { ticks: { color: '#9fb1c3' }, grid: { color: '#1f2c38' }, beginAtZero: true, stacked: false }
+                    },
+                    plugins: {
+                        legend: { labels: { color: '#e7eef5' } },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: (ctx) => `${ctx.dataset.label}: ${formatKw(ctx.raw)}`
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderChart() {
+            if (!state.chart || !state.timeline.length) return;
+            // Keep canvas height aligned to layout
+            adjustChartHeight();
+            const labels = state.timeline.map(ts => new Date(ts).toLocaleTimeString());
+            const datasets = [];
+            const ctx = state.chart.ctx || state.chart.canvas.getContext('2d');
+            const chartArea = state.chart.chartArea;
+            const gradientHeight = chartArea ? chartArea.bottom - chartArea.top : (state.chart.canvas?.height || 300);
+            state.utilities.forEach((util, idx) => {
+                if (!state.selected.has(util.id)) return;
+                const data = state.history[util.id] || [];
+                const gradient = getLineGradient(idx, ctx, gradientHeight);
+                datasets.push({
+                    label: util.name,
+                    data,
+                    borderColor: gradient,
+                    backgroundColor: gradient,
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    spanGaps: true,
+                    tension: 0.35,
+                    fill: false
+                });
+            });
+            if (state.selected.has(TOTAL_STACK_ID) && state.selected.size) {
+                const totalData = state.timeline.map((_, i) => {
+                    let sum = 0;
+                    let has = false;
+                    state.utilities.forEach(u => {
+                        const val = (state.history[u.id] || [])[i];
+                        if (val !== null && val !== undefined && !isNaN(val)) {
+                            sum += val;
+                            has = true;
+                        }
+                    });
+                    return has ? sum : null;
+                });
+                const gradient = getLineGradient(TOTAL_COLOR_INDEX, ctx, gradientHeight);
+                datasets.push({
+                    label: 'Totale stack',
+                    data: totalData,
+                    borderColor: gradient,
+                    backgroundColor: gradient,
+                    borderWidth: 3,
+                    pointRadius: 0,
+                    spanGaps: true,
+                    tension: 0.2,
+                    fill: false
+                });
+            }
+            state.chart.data.labels = labels;
+            state.chart.data.datasets = datasets;
+            state.chart.update();
+        }
+
+        function renderCards(latestResults) {
+            els.cards.innerHTML = '';
+            if (!state.utilities.length) {
+            els.empty.style.display = 'block';
+            return;
+        }
+        els.empty.style.display = 'none';
+        if (!state.selectionInitialized && state.selected.size === 0) {
+            state.utilities.forEach(u => state.selected.add(u.id));
+            state.selected.add(TOTAL_STACK_ID);
+            state.selectionInitialized = true;
+        }
+        const toggle = (id) => {
+            if (state.selected.has(id)) state.selected.delete(id);
+            else state.selected.add(id);
+            renderCards(latestResults);
+                renderChart();
+            };
+            const appendCard = (id, name, group, locationText, valueText, color) => {
+                const card = document.createElement('div');
+                card.className = 'card';
+                if (!state.selected.has(id)) card.classList.add('inactive');
+                card.onclick = () => toggle(id);
+                const title = document.createElement('h3');
+                title.textContent = name;
+                if (group) {
+                    const badge = document.createElement('span');
+                    badge.className = 'badge';
+                    badge.textContent = group;
+                    if (color) {
+                        badge.style.border = `1px solid ${color}`;
+                        badge.style.color = color;
+                        const bg = hexToRgba(color, 0.12);
+                        if (bg) badge.style.backgroundColor = bg;
+                    }
+                    title.appendChild(badge);
+                }
+                const location = document.createElement('small');
+                location.textContent = locationText;
+                const value = document.createElement('div');
+                value.className = 'value';
+                value.textContent = valueText;
+                card.appendChild(title);
+                card.appendChild(location);
+                card.appendChild(value);
+                els.cards.appendChild(card);
+            };
+            state.utilities.forEach((util, idx) => {
+                const res = latestResults[util.id];
+                const val = res && res.values ? res.values[state.powerRegister?.startAddress] : null;
+                const color = getLineSolidColor(idx);
+                appendCard(util.id, util.name, util.group, `C${util.cabinet} - N${util.node}`, formatKw(val), color);
+            });
+            // stacked total card
+            if (state.utilities.length) {
+                let total = null;
+                state.utilities.forEach(util => {
+                    const res = latestResults[util.id];
+                    const val = res && res.values ? res.values[state.powerRegister?.startAddress] : null;
+                    if (val !== null && val !== undefined && !isNaN(val)) {
+                        total = (total || 0) + val;
+                    }
+                });
+                const totalColor = getLineSolidColor(TOTAL_COLOR_INDEX);
+                appendCard(TOTAL_STACK_ID, 'Totale stack', null, 'Somma macchine visibili', formatKw(total), totalColor);
+            }
+            updateBadgeRowLayout();
+        }
+
+        function updateBadgeRowLayout() {
+            const cards = els.cards?.children;
+            if (!cards || !cards.length) {
+                document.body.classList.remove('single-row-badges');
+                return;
+            }
+            const rows = new Set();
+            Array.from(cards).forEach(card => rows.add(card.offsetTop));
+            if (rows.size === 1) {
+                document.body.classList.add('single-row-badges');
+            } else {
+                document.body.classList.remove('single-row-badges');
+            }
+            adjustChartHeight();
+        }
+
+        function renderGroups(groups) {
+            els.groupSelect.innerHTML = '';
+            
+            const allOpt = document.createElement('option');
+            allOpt.value = 'All';
+            allOpt.textContent = 'All Groups';
+            if (state.group === 'All') allOpt.selected = true;
+            els.groupSelect.appendChild(allOpt);
+
+            if (!Array.isArray(groups) || !groups.length) return;
+
+            groups.forEach(g => {
+                const opt = document.createElement('option');
+                opt.value = g;
+                opt.textContent = g;
+                if (g.toLowerCase() === state.group.toLowerCase()) opt.selected = true;
+                els.groupSelect.appendChild(opt);
+            });
+        }
+
+        function setGroup(newGroup) {
+            state.group = newGroup;
+            state.timeline = [];
+            state.history = {};
+            state.selected = new Set();
+            state.selectionInitialized = false;
+            els.groupLabel.textContent = newGroup === 'All' ? 'All Groups' : newGroup;
+            requestGroupData();
+        }
+
+        function adjustChartHeight() {
+            const canvas = document.getElementById('groupChart');
+            const card = canvas ? canvas.closest('.chart-card') : null;
+            if (!canvas || !card) return;
+            const header = card.querySelector('.chart-head');
+            const headerH = header ? header.offsetHeight : 50;
+            const available = card.clientHeight - headerH - 24; // padding/breathing
+            CHART_HEIGHT = Math.max(240, available);
+            canvas.height = CHART_HEIGHT;
+            canvas.style.height = CHART_HEIGHT + 'px';
+            if (state.chart) state.chart.resize();
+        }
+
+        els.groupSelect.addEventListener('change', (e) => {
+            setGroup(e.target.value);
+        });
+
+        function requestGroupData() {
+            const hasSelection = persistedSelection.ids.size > 0;
+            
+            if (hasSelection) {
+                // Poll specific selected machines only for faster updates
+                const ids = Array.from(persistedSelection.ids);
+                socket.emit('updateFilters', {
+                    cabinets: [],
+                    group1: [],
+                    group2: [],
+                    selectedMachines: ids,
+                    onlySelected: true,
+                    minCurrent: 'all',
+                    onlyErrors: false
+                });
+            } else {
+                // Fallback: poll by group if no specific machines selected
+                const groupsToRequest = state.group === 'All' ? persistedSelection.groups : [state.group];
+                socket.emit('updateFilters', {
+                    cabinets: [],
+                    groups: groupsToRequest,
+                    minCurrent: 'all',
+                    onlyErrors: false
+                });
+            }
+        }
+
+        socket.on('connect', () => {
+            setStatus('Connected', 'waiting for data...');
+            adjustChartHeight();
+            requestGroupData();
+        });
+        socket.on('disconnect', () => setStatus('Disconnected', 'trying to reconnect'));
+
+        socket.on('update', (data) => {
+            state.registers = data.registers;
+            state.powerRegister = findPowerRegister(data.registers);
+            const utilitiesAll = normalizeUtilities(data.utilities);
+            const scopedUtilities = persistedSelection.ids.size ? utilitiesAll.filter(u => persistedSelection.ids.has(u.id)) : utilitiesAll;
+            const groupsFromData = [...new Set(scopedUtilities.map(u => u.group).filter(Boolean))];
+            const fallbackGroups = data.availableFilters?.group1 || data.availableFilters?.groups || [];
+            const groups = groupsFromData.length ? groupsFromData : fallbackGroups;
+            
+            renderGroups(groups);
+
+            if (state.group === 'All') {
+                state.utilities = scopedUtilities;
+            } else {
+                state.utilities = scopedUtilities.filter(u => u.group && u.group.toLowerCase() === state.group.toLowerCase());
+            }
+            // If we switched group after renderGroups, ensure dropdown reflects it
+            if (els.groupSelect.value && els.groupSelect.value.toLowerCase() !== state.group.toLowerCase()) {
+                els.groupSelect.value = state.group;
+            }
+
+            if (!state.powerRegister) {
+                setStatus('No power register', 'add a kW/W register to registri.csv');
+                return;
+            }
+
+            // Keep selected set in sync
+            if (!state.selectionInitialized && !state.selected.size) {
+                state.utilities.forEach(u => state.selected.add(u.id));
+                state.selected.add(TOTAL_STACK_ID);
+                state.selectionInitialized = true;
+            }
+            const ids = state.utilities.map(u => u.id);
+            Array.from(state.selected).forEach(id => {
+                if (id === TOTAL_STACK_ID) return;
+                if (!ids.includes(id)) state.selected.delete(id);
+            });
+
+            state.latestResults = data.latestResults || {};
+            pushDataForGroup(state.latestResults);
+            buildChart();
+            renderCards(state.latestResults);
+            renderChart();
+
+            const lastUpdate = new Date().toLocaleTimeString();
+            setStatus(`Live - ${state.group}`, `interval ${data.config?.measurement_interval_ms || 0} ms - updated ${lastUpdate}`);
+        });
+
+        function toggleAllNodes() {
+            const relevantIds = state.utilities.map(u => u.id);
+            if (state.utilities.length) relevantIds.push(TOTAL_STACK_ID);
+
+            const allSelected = relevantIds.every(id => state.selected.has(id));
+
+            if (allSelected) {
+                state.selected.clear();
+            } else {
+                relevantIds.forEach(id => state.selected.add(id));
+            }
+            renderCards(state.latestResults || {});
+            renderChart();
+        }
+
+        let isReadingsCollapsed = false;
+        function toggleReadings() {
+            isReadingsCollapsed = !isReadingsCollapsed;
+            const container = document.getElementById('cardsContainer');
+            const icon = document.getElementById('collapseIcon');
+            const panel = document.getElementById('readingsPanel');
+            
+            if (isReadingsCollapsed) {
+                container.style.display = 'none';
+                icon.style.transform = 'rotate(-90deg)';
+                panel.style.flex = '0 0 auto';
+                panel.style.minHeight = 'auto';
+            } else {
+                container.style.display = 'block';
+                icon.style.transform = 'rotate(0deg)';
+                panel.style.removeProperty('flex');
+                panel.style.removeProperty('min-height');
+            }
+            
+            setTimeout(() => {
+                adjustChartHeight();
+                renderChart();
+            }, 100);
+        }
+
+        window.addEventListener('resize', () => {
+            adjustChartHeight();
+            updateBadgeRowLayout();
+            renderChart();
+        });
+    </script>
+</body>
+</html>

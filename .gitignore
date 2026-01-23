@@ -1,0 +1,4 @@
+node_app/node_modules/
+plant_total/node_modules/
+node_modules/
+.env

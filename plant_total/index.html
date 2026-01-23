@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Potenza attiva BT</title>
+    <style>
+        body {
+            background-color: #121212;
+            color: #e0e0e0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 5px;
+        }
+
+        h1 {
+            margin: 0;
+            color: #4ec9b0;
+            font-size: 1.2rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .main-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .total-card {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            box-shadow: 0 5px 10px rgba(0,0,0,0.6);
+            margin-bottom: 0;
+            width: 90%;
+            max-width: 350px;
+        }
+
+        .total-label {
+            font-size: 0.9rem;
+            color: #aabbee;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+            letter-spacing: 0.5px;
+        }
+
+        .total-value {
+            font-size: 3rem;
+            font-weight: bold;
+            color: #ffffff;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.4);
+            line-height: 1;
+        }
+
+        .total-unit {
+            font-size: 1.2rem;
+            color: #aabbee;
+            margin-left: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Potenza attiva BT</h1>
+    </header>
+
+    <div class="main-container">
+        <!-- Grand Total -->
+        <div class="total-card">
+            <div class="total-label">Total Active Power</div>
+            <div class="total-value">
+                <span id="totalKw">---</span><span class="total-unit">kW</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const totalKwEl = document.getElementById('totalKw');
+
+        window.electronAPI.onUpdateData((data) => {
+            // Update Total
+            // Format with 1 decimal place as requested in previous config
+            totalKwEl.textContent = data.total.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+        });
+    </script>
+</body>
+</html>
