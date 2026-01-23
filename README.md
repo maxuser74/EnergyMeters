@@ -12,6 +12,7 @@ A Node.js application for reading energy meter data via Modbus TCP. This project
     *   **Power Factor (PF)**: Colors values Red (< 0.4) or Yellow (< 0.7).
     *   **Voltage**: Colors values Red if outside configured ranges (L-L: 380-420V, L-N: 210-250V).
     *   **Active Power (kW)**: Turns Red if the Power Factor for that meter is critical.
+*   **Multiple Utility Files**: Switch between different meter configurations (files starting with `Read_*.xlsx`) directly from the web interface.
 *   **Auto-Reload**: The web server automatically restarts when code or configuration changes.
 *   **Custom Formatting**: Supports configurable decimal places and integer padding for Voltage (V), Current (A), Power Factor (PF), and Power (kW).
 *   **Detail View & Charts**: Click a table row to open a per-meter modal with badges and history charts for currents and power (Chart.js served locally with CDN fallback).
@@ -25,10 +26,17 @@ A Node.js application for reading energy meter data via Modbus TCP. This project
 
 1.  Clone or download this repository.
 2.  Open a terminal in the project folder.
-3.  Install the dependencies:
+3.  Install the main dependencies:
 
     ```powershell
     npm install
+    ```
+4.  (Optional) If you plan to use the **Plant Total App**:
+    
+    ```powershell
+    cd plant_total
+    npm install
+    cd ..
     ```
 
 ## Configuration
@@ -53,30 +61,55 @@ The application uses three main configuration files:
 
 ## Usage
 
-To start the web server with auto-reload enabled:
+### Web Datalogger
+
+The easiest way to start the application is using the provided batch file:
+
+```powershell
+.\Launch_App.bat
+```
+
+This will:
+1.  Kill any existing process on port 3000.
+2.  Start the Node.js server with auto-reload.
+3.  Open the web dashboard in your default browser at **[http://localhost:3000](http://localhost:3000)**.
+
+Alternatively, you can run it manually:
 
 ```powershell
 .\run_node_web.ps1
 ```
 
-*   Open your browser to **[http://localhost:3000](http://localhost:3000)**.
-*   To use a specific utilities file: `.\run_node_web.ps1 --utilities .\MyFile.xlsx`
+*   To use a specific utilities file from command line: `.\run_node_web.ps1 --utilities .\MyFile.xlsx`
 
-### Detail View & Charts
+### Plant Total App
 
-*   Click any meter row to open the detail modal.
-*   You will see live badges plus two history charts: currents (A) and power (kW).
-*   The power chart starts at 0 on the Y axis to make trends clear, and points are small to reduce clutter.
-*   Chart.js is served locally from `/vendor/chart.umd.js` with a CDN fallback if needed.
-*   Up to 120 recent points per meter are buffered client-side so the graph stays populated while streaming.
+To launch the standalone desktop view for Plant Totals (Electron App):
+
+```powershell
+.\Launch_Plant_Total.bat
+```
+
+This opens a dedicated window showing aggregated power data for specific cabinets.
+
+### Features & Navigation
+
+*   **Switching Configurations**: Use the file selector in the UI to switch between utility lists (must be named `Read_*.xlsx`).
+*   **Detail View & Charts**: Click any meter row to open the detail modal.
+*   **Live Filters**: Use the checkboxes in the top bar to filter by "High Current" or "Errors Only".
 
 ## Project Structure
 
-*   `web_datalogger.js`: Main entry point for the web application.
+*   `web_datalogger.js`: Main entry point for the web application (Express/Socket.io).
 *   `public/`: Contains the HTML/CSS/JS for the web frontend.
-*   `run_node_web.ps1`: PowerShell script to launch the web logger with `nodemon`.
+*   `plant_total/`: Separate Electron application for "Plant Total" display.
+    *   `main.js`: Electron entry point.
+    *   `index.html`: UI for the plant total window.
+*   `Launch_App.bat`: Window batch script to launch the web dashboard.
+*   `Launch_Plant_Total.bat`: Windows batch script to launch the Plant Total app.
 *   `config.md`: Configuration file for intervals and formatting.
 *   `Utenze_main.xlsx`: Default list of meters.
+*   `registri.csv`: Modbus register definitions.
 
 ## Troubleshooting
 
