@@ -300,6 +300,14 @@
                     </div>
                     <div class="chart-subtitle" id="sampleInfo"></div>
                 </div>
+                <div class="pill-wrap" style="margin-bottom: 15px;">
+                    <span style="font-size: 13px; color: var(--muted); display: flex; align-items: center; margin-right: 8px;">Moving Average:</span>
+                    <button class="pill active" onclick="setMA(0, this)">Live</button>
+                    <button class="pill" onclick="setMA(60000, this)">1 min</button>
+                    <button class="pill" onclick="setMA(300000, this)">5 min</button>
+                    <button class="pill" onclick="setMA(900000, this)">15 min</button>
+                    <button class="pill" onclick="setMA(3600000, this)">1h</button>
+                </div>
                 <canvas id="groupChart"></canvas>
             </div>
 
@@ -342,7 +350,9 @@
 
         const persistedSelection = loadStoredSelection();
         const DEFAULT_GROUP = 'All';
-        const MAX_POINTS = 480;
+        const MAX_POINTS = 36000;
+        const MAX_DISPLAY_POINTS = 720;
+        let currentMAWindow = 0;
         let CHART_HEIGHT = 280;
         const TOTAL_STACK_ID = 'TOTAL_STACK';
         let gradientPairs = [];
@@ -514,18 +524,116 @@
             });
         }
 
+        function setMA(ms, btn) {
+            currentMAWindow = ms;
+            document.querySelectorAll('.pill-wrap .pill').forEach(p => p.classList.remove('active'));
+            if(btn) btn.classList.add('active');
+            renderChart();
+            renderCards();
+        }
+
+        function getComputedLastValue(utilId) {
+             const hist = state.history[utilId];
+             if (!hist || !hist.length) return null;
+             // Live optimization
+             if (currentMAWindow === 0) return hist[hist.length - 1];
+             
+             const lastIdx = state.timeline.length - 1;
+             const res = computeRollingAverage(hist, state.timeline, lastIdx, 1, currentMAWindow);
+             return res[0];
+        }
+
+        function computeRollingAverage(values, timeline, startIndex, count, windowMs) {
+            const result = [];
+            if (windowMs === 0) {
+                 for(let i=0; i<count; i++) result.push(values[startIndex + i]);
+                 return result;
+            }
+
+            let windowSum = 0;
+            let windowCount = 0;
+            const tEnd = timeline[startIndex];
+            const tStart = tEnd - windowMs;
+            
+            // Initial window calculation for the first point
+            let ptr = startIndex;
+            while(ptr >= 0 && timeline[ptr] >= tStart) {
+                 const v = values[ptr];
+                 if (v !== null && v !== undefined && !isNaN(v)) {
+                     windowSum += v;
+                     windowCount++;
+                 }
+                 ptr--;
+            }
+            let windowLeftIndex = ptr + 1;
+            
+            result.push(windowCount > 0 ? windowSum / windowCount : null);
+            
+            // Slide forward
+            for (let i = 1; i < count; i++) {
+                const idx = startIndex + i;
+                const nextTEnd = timeline[idx];
+                const nextTStart = nextTEnd - windowMs;
+                
+                // Add new point
+                 const valNew = values[idx];
+                 if (valNew !== null && valNew !== undefined && !isNaN(valNew)) {
+                     windowSum += valNew;
+                     windowCount++;
+                 }
+                 
+                // Remove old points
+                while(windowLeftIndex < idx && timeline[windowLeftIndex] < nextTStart) {
+                    const valOld = values[windowLeftIndex];
+                     if (valOld !== null && valOld !== undefined && !isNaN(valOld)) {
+                         windowSum -= valOld;
+                         windowCount--;
+                     }
+                     windowLeftIndex++;
+                }
+                result.push(windowCount > 0 ? windowSum / windowCount : null);
+            }
+            return result;
+        }
+
         function renderChart() {
             if (!state.chart || !state.timeline.length) return;
-            // Keep canvas height aligned to layout
             adjustChartHeight();
-            const labels = state.timeline.map(ts => new Date(ts).toLocaleTimeString());
+
+            // Calculate display range (tail)
+            const startIndex = Math.max(0, state.timeline.length - MAX_DISPLAY_POINTS);
+            const displayCount = state.timeline.length - startIndex;
+            const displayTimeline = state.timeline.slice(startIndex);
+            const labels = displayTimeline.map(ts => new Date(ts).toLocaleTimeString());
+            
             const datasets = [];
             const ctx = state.chart.ctx || state.chart.canvas.getContext('2d');
             const chartArea = state.chart.chartArea;
             const gradientHeight = chartArea ? chartArea.bottom - chartArea.top : (state.chart.canvas?.height || 300);
+
+            // Compute Total History only if needed for display
+            let totalHistory = null;
+            if (state.selected.has(TOTAL_STACK_ID)) {
+                totalHistory = new Array(state.timeline.length).fill(null);
+                for(let i=0; i<state.timeline.length; i++) {
+                     let sum = 0;
+                     let has = false;
+                     state.utilities.forEach(u => {
+                         const val = (state.history[u.id] || [])[i];
+                         if (val !== null && val !== undefined && !isNaN(val)) {
+                             sum += val;
+                             has = true;
+                         }
+                     });
+                     if(has) totalHistory[i] = sum;
+                }
+            }
+
             state.utilities.forEach((util, idx) => {
                 if (!state.selected.has(util.id)) return;
-                const data = state.history[util.id] || [];
+                const fullHistory = state.history[util.id] || [];
+                const data = computeRollingAverage(fullHistory, state.timeline, startIndex, displayCount, currentMAWindow);
+
                 const gradient = getLineGradient(idx, ctx, gradientHeight);
                 datasets.push({
                     label: util.name,
@@ -539,23 +647,13 @@
                     fill: false
                 });
             });
-            if (state.selected.has(TOTAL_STACK_ID) && state.selected.size) {
-                const totalData = state.timeline.map((_, i) => {
-                    let sum = 0;
-                    let has = false;
-                    state.utilities.forEach(u => {
-                        const val = (state.history[u.id] || [])[i];
-                        if (val !== null && val !== undefined && !isNaN(val)) {
-                            sum += val;
-                            has = true;
-                        }
-                    });
-                    return has ? sum : null;
-                });
+
+            if (state.selected.has(TOTAL_STACK_ID) && totalHistory) {
+                const totalDisplayData = computeRollingAverage(totalHistory, state.timeline, startIndex, displayCount, currentMAWindow);
                 const gradient = getLineGradient(TOTAL_COLOR_INDEX, ctx, gradientHeight);
                 datasets.push({
                     label: 'Totale stack',
-                    data: totalData,
+                    data: totalDisplayData,
                     borderColor: gradient,
                     backgroundColor: gradient,
                     borderWidth: 3,
@@ -565,27 +663,28 @@
                     fill: false
                 });
             }
+
             state.chart.data.labels = labels;
             state.chart.data.datasets = datasets;
             state.chart.update();
         }
 
-        function renderCards(latestResults) {
+        function renderCards() {
             els.cards.innerHTML = '';
             if (!state.utilities.length) {
-            els.empty.style.display = 'block';
-            return;
-        }
-        els.empty.style.display = 'none';
-        if (!state.selectionInitialized && state.selected.size === 0) {
-            state.utilities.forEach(u => state.selected.add(u.id));
-            state.selected.add(TOTAL_STACK_ID);
-            state.selectionInitialized = true;
-        }
-        const toggle = (id) => {
-            if (state.selected.has(id)) state.selected.delete(id);
-            else state.selected.add(id);
-            renderCards(latestResults);
+                els.empty.style.display = 'block';
+                return;
+            }
+            els.empty.style.display = 'none';
+            if (!state.selectionInitialized && state.selected.size === 0) {
+                state.utilities.forEach(u => state.selected.add(u.id));
+                state.selected.add(TOTAL_STACK_ID);
+                state.selectionInitialized = true;
+            }
+            const toggle = (id) => {
+                if (state.selected.has(id)) state.selected.delete(id);
+                else state.selected.add(id);
+                renderCards();
                 renderChart();
             };
             const appendCard = (id, name, group, locationText, valueText, color) => {
@@ -617,24 +716,23 @@
                 card.appendChild(value);
                 els.cards.appendChild(card);
             };
+
+            let totalSum = 0;
+            let hasTotal = false;
+
             state.utilities.forEach((util, idx) => {
-                const res = latestResults[util.id];
-                const val = res && res.values ? res.values[state.powerRegister?.startAddress] : null;
+                const val = getComputedLastValue(util.id);
+                if (val !== null && val !== undefined && !isNaN(val)) {
+                    totalSum += val;
+                    hasTotal = true;
+                }
                 const color = getLineSolidColor(idx);
                 appendCard(util.id, util.name, util.group, `C${util.cabinet} - N${util.node}`, formatKw(val), color);
             });
             // stacked total card
             if (state.utilities.length) {
-                let total = null;
-                state.utilities.forEach(util => {
-                    const res = latestResults[util.id];
-                    const val = res && res.values ? res.values[state.powerRegister?.startAddress] : null;
-                    if (val !== null && val !== undefined && !isNaN(val)) {
-                        total = (total || 0) + val;
-                    }
-                });
                 const totalColor = getLineSolidColor(TOTAL_COLOR_INDEX);
-                appendCard(TOTAL_STACK_ID, 'Totale stack', null, 'Somma macchine visibili', formatKw(total), totalColor);
+                appendCard(TOTAL_STACK_ID, 'Totale stack', null, 'Somma macchine visibili', formatKw(hasTotal ? totalSum : null), totalColor);
             }
             updateBadgeRowLayout();
         }
@@ -777,7 +875,7 @@
             state.latestResults = data.latestResults || {};
             pushDataForGroup(state.latestResults);
             buildChart();
-            renderCards(state.latestResults);
+            renderCards();
             renderChart();
 
             const lastUpdate = new Date().toLocaleTimeString();
@@ -795,7 +893,7 @@
             } else {
                 relevantIds.forEach(id => state.selected.add(id));
             }
-            renderCards(state.latestResults || {});
+            renderCards();
             renderChart();
         }
 
