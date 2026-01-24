@@ -927,6 +927,13 @@
             updateBadgeRowLayout();
             renderChart();
         });
+
+        // Handle Escape key to return to Dashboard
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                window.location.href = '/';
+            }
+        });
     </script>
 </body>
 </html>

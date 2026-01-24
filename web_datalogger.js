@@ -160,8 +160,8 @@ let latestResults = {};
 let history = {}; // Store historical data for graphs
 const MAX_HISTORY_POINTS = 60; // Keep last 60 readings
 let isPaused = false;
-let availableFilters = { group1: [], group2: [] };
-let activeFilters = { group1: [], group2: [], minCurrent: 'all', onlyErrors: false, selectedMachines: [], onlySelected: false };
+let availableFilters = { group1: [], group2: [], tags: [] };
+let activeFilters = { group1: [], group2: [], tags: [], minCurrent: 'all', onlyErrors: false, selectedMachines: [], onlySelected: false };
 let needsReload = false;
 
 
@@ -229,8 +229,35 @@ function loadUtilities() {
             const name = row['Machine'] || row['Name'] || row['Nome'] || 'Unknown';
             const cabinet = row['Cabinet'] || row['Quadro'];
             const node = row['Node'] || row['Nodo'];
+
             const group1 = row['Group1'] || row['Group 1'] || row['Main Group'] || row['Group'] || 'Unknown';
             const group2 = row['Group2'] || row['Group 2'] || row['Aux Group'] || row['SubGroup'] || 'Unknown';
+            
+            // Read tags from columns Tag1, Tag2, Tag3... or Tags
+            const tags = [];
+            // Method 1: Split comma separated 'tags'
+            const tagsStr = row['tags'] || row['Tags'];
+            if (tagsStr) {
+                tags.push(...tagsStr.split(',').map(t => t.trim()).filter(t => t));
+            }
+            // Method 2: Read specific columns 'Tag1', 'Tag2', etc. (User said "rimesso in colonne")
+            // Iterate keys to find Tag* columns
+            const keys = Object.keys(row);
+            const tagCols = keys.filter(k => /^Tag\s*\d+$/i.test(k)).sort((a, b) => {
+                // simple sort Tag1, Tag2
+                const nA = parseInt(a.replace(/Tag/i, '').trim());
+                const nB = parseInt(b.replace(/Tag/i, '').trim());
+                return nA - nB;
+            });
+            
+            tagCols.forEach(col => {
+                const val = row[col];
+                if (val) tags.push(String(val).trim());
+            });
+
+            // If user meant Tag1, Tag2.. this puts them in order. 
+            // If they mixed comma separated and columns, we'll have both.
+
             let ip = row['IP'] || row['Indirizzo IP'];
             
             // Fallback: Map Cabinet ID to known IP addresses if not specified in file
@@ -250,6 +277,7 @@ function loadUtilities() {
                 node: node,
                 group1,
                 group2,
+                tags,
                 ip: ip,
                 port: row['Port'] || 502
             };
@@ -258,7 +286,22 @@ function loadUtilities() {
         // Extract available options
         const group1 = [...new Set(allUtilities.map(u => u.group1))].sort();
         const group2 = [...new Set(allUtilities.map(u => u.group2))].sort();
-        availableFilters = { group1, group2 };
+        
+        // Group tags by level (index in 0-based array)
+        const tagsByLevel = [];
+        allUtilities.forEach(u => {
+            if (Array.isArray(u.tags)) {
+                u.tags.forEach((tag, idx) => {
+                    if (!tagsByLevel[idx]) tagsByLevel[idx] = new Set();
+                    tagsByLevel[idx].add(tag);
+                });
+            }
+        });
+        
+        // Convert sets to sorted arrays
+        const availableTags = tagsByLevel.map(s => [...s].sort().filter(t => t));
+        
+        availableFilters = { group1, group2, tags: availableTags };
         const selectedSet = new Set((activeFilters.selectedMachines || []).map(id => String(id)));
         const enforceSelected = activeFilters.onlySelected;
 
@@ -266,11 +309,22 @@ function loadUtilities() {
         utilities = allUtilities.filter(u => {
             const group1Selected = activeFilters.group1.length > 0;
             const group2Selected = activeFilters.group2.length > 0;
+            const tagsSelected = activeFilters.tags && activeFilters.tags.length > 0;
+            
             const group1Match = group1Selected ? activeFilters.group1.includes(u.group1) : true;
             const group2Match = group2Selected ? activeFilters.group2.includes(u.group2) : true;
+            
+            // Tags match: if any of the selected tags are present in utility tags
+            // or maybe ALL? Standard filter logic for tags is typically OR (show items with Tag A OR Tag B).
+            // But if I want to narrow down, maybe AND? 
+            // The user said "combinazioni multiple". 
+            // Let's assume OR for now, as it's more common for "filtering" a list.
+            const tagsMatch = tagsSelected ? u.tags.some(t => activeFilters.tags.includes(t)) : true;
+            
             const selectionMatch = enforceSelected ? selectedSet.has(String(u.id)) : true;
 
-            return group1Match && group2Match && selectionMatch;
+            // Note: Currently we are combining Group1 AND Group2 AND Tags AND Selected
+            return group1Match && group2Match && tagsMatch && selectionMatch;
         });
 
     } catch (e) {

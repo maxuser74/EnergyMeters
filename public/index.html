@@ -14,6 +14,9 @@
         }
     </script>
     <style>
+        html {
+            font-size: 125%; /* Increase base font size by 25% */
+        }
         body {
             background-color: #1e1e1e;
             color: #d4d4d4;
@@ -64,13 +67,21 @@
              overflow: hidden;
              text-overflow: ellipsis;
         }
-        /* Group Columns */
-        td:nth-child(3), td:nth-child(4) { 
-             max-width: 100px;
-             white-space: nowrap;
-             overflow: hidden;
-             text-overflow: ellipsis;
+        /* Group Columns - REMOVED */
+
+        /* Location Column */
+        td:nth-child(3) {
+            max-width: 80px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
+
+        /* Status Column */
+        td:nth-child(4) {
+            text-align: center;
+        }
+        
         tfoot {
             position: sticky;
             bottom: 0;
@@ -122,7 +133,7 @@
         .modal {
             display: none; 
             position: fixed; 
-            z-index: 1; 
+            z-index: 1000; 
             left: 0;
             top: 0;
             width: 100%; 
@@ -196,7 +207,7 @@
         .close-modal {
             color: #aaa;
             float: right;
-            font-size: 28px;
+            font-size: 35px; /* Increased from 28px (+25%) */
             font-weight: bold;
             cursor: pointer;
         }
@@ -311,6 +322,40 @@
             border: 1px solid #3e3e42;
             min-height: 300px;
         }
+
+        .tag-level-container {
+            display: inline-flex;
+            flex-wrap: wrap;
+            align-items: center;
+            border: 1px solid #444; 
+            border-radius: 4px; 
+            padding: 5px 10px; 
+            margin-right: 15px;
+            background-color: #2d2d30;
+            vertical-align: top;
+            margin-bottom: 5px;
+        }
+        .tag-level-label {
+            color: #888;
+            font-size: 0.8em;
+            font-weight: bold;
+            margin-right: 10px;
+            text-transform: uppercase;
+            border-right: 1px solid #555;
+            padding-right: 8px;
+            min-width: 50px; /* Ensure label has some presence */
+        }
+
+        .general-node-badge {
+            display: inline-block;
+            background-color: #007acc;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            border: 1px solid #4ec9b0;
+        }
     </style>
 </head>
 <body>
@@ -360,10 +405,14 @@
     <!-- Filters -->
     <div id="filtersContainer" style="background-color: #252526; padding: 10px; margin-bottom: 20px; border-radius: 4px; border: 1px solid #3e3e42; display: none;">
         <div style="margin-bottom: 8px;">
+            <strong style="color: #569cd6; margin-right: 10px;">Tags:</strong>
+            <span id="tagsFilters"></span>
+        </div>
+        <div style="display: none;">
             <strong style="color: #569cd6; margin-right: 10px;">Group1:</strong>
             <span id="group1Filters"></span>
         </div>
-        <div>
+        <div style="display: none;">
             <strong style="color: #569cd6; margin-right: 10px;">Group2:</strong>
             <span id="group2Filters"></span>
         </div>
@@ -378,10 +427,8 @@
                         <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this.checked)" style="margin-top: 4px; cursor: pointer;">
                     </th>
                     <th>Machine</th>
-                    <th>Group1</th>
-                    <th>Group2</th>
-                    <th>Location</th>
-                    <th>Status</th>
+                    <th style="width: 80px;">Location</th>
+                    <th style="width: 50px; text-align: center;" title="Status">🚦</th>
                     <!-- Dynamic headers will go here -->
                 </tr>
             </thead>
@@ -456,6 +503,7 @@
         const filtersContainer = document.getElementById('filtersContainer');
         const group1FiltersSpan = document.getElementById('group1Filters');
         const group2FiltersSpan = document.getElementById('group2Filters');
+        const tagsFiltersSpan = document.getElementById('tagsFilters');
         const detailModal = document.getElementById('detailModal');
         const detailTitle = document.getElementById('detailTitle');
         const detailBadges = document.getElementById('detailBadges');
@@ -846,6 +894,7 @@
         function renderFilters(available, active) {
             const activeGrp1 = (active && active.group1) ? active.group1 : [];
             const activeGrp2 = (active && active.group2) ? active.group2 : [];
+            const activeTags = (active && active.tags) ? active.tags : [];
 
             // Check if options changed
             const optionsChanged = !lastAvailableFilters || 
@@ -853,6 +902,80 @@
             
             if (optionsChanged) {
                 lastAvailableFilters = available;
+
+
+                // Render Tags (New)
+                if (tagsFiltersSpan) {
+                    tagsFiltersSpan.innerHTML = '';
+                    const tagsData = available.tags || [];
+                    console.log("Tags Data received from server:", tagsData);
+
+                    // Check if it's the new nested structure (array of arrays)
+                    // If backend sends string[][]
+                    if (tagsData.length > 0 && Array.isArray(tagsData[0])) {
+                        tagsData.forEach((levelTags, idx) => {
+                            if (!levelTags || levelTags.length === 0) return;
+                            
+                            const levelContainer = document.createElement('div');
+                            levelContainer.className = 'tag-level-container';
+                            
+                            const levelLabel = document.createElement('span');
+                            levelLabel.className = 'tag-level-label';
+                            levelLabel.textContent = `Level ${idx + 1}`;
+                            levelContainer.appendChild(levelLabel);
+
+                            levelTags.forEach(tag => {
+                                const label = document.createElement('label');
+                                label.style.marginRight = '15px';
+                                label.style.cursor = 'pointer';
+                                label.style.display = 'inline-flex';
+                                label.style.alignItems = 'center';
+                                
+                                const cb = document.createElement('input');
+                                cb.type = 'checkbox';
+                                cb.value = tag;
+                                cb.dataset.type = 'tags';
+                                cb.onchange = handleFilterChange;
+                                cb.style.marginRight = '5px';
+                                
+                                label.appendChild(cb);
+                                label.appendChild(document.createTextNode(tag));
+                                levelContainer.appendChild(label);
+                            });
+                            
+                            tagsFiltersSpan.appendChild(levelContainer);
+                        });
+                    } else {
+                        // Fallback for flat list (or if level logic yields flat list conceptually)
+                         const levelContainer = document.createElement('div');
+                         levelContainer.className = 'tag-level-container';
+                         
+                         const levelLabel = document.createElement('span');
+                         levelLabel.className = 'tag-level-label';
+                         levelLabel.textContent = `All Tags`;
+                         levelContainer.appendChild(levelLabel);
+                         
+                        (available.tags || []).forEach(tag => {
+                            const label = document.createElement('label');
+                            label.style.marginRight = '15px';
+                            label.style.cursor = 'pointer';
+                            label.style.display = 'inline-flex';
+                            label.style.alignItems = 'center';
+                            
+                            const cb = document.createElement('input');
+                            cb.type = 'checkbox';
+                            cb.value = tag;
+                            cb.dataset.type = 'tags';
+                            cb.onchange = handleFilterChange;
+                            cb.style.marginRight = '5px';
+                            
+                            label.appendChild(cb);
+                            label.appendChild(document.createTextNode(tag));
+                            levelContainer.appendChild(label);
+                        });
+                        tagsFiltersSpan.appendChild(levelContainer);
+                    }
+                }
 
                 // Render Main Group1
                 group1FiltersSpan.innerHTML = '';
@@ -901,11 +1024,19 @@
             grp2Checkboxes.forEach(cb => {
                 cb.checked = activeGrp2.includes(cb.value);
             });
+
+            if (tagsFiltersSpan) {
+                const tagsCheckboxes = tagsFiltersSpan.querySelectorAll('input');
+                tagsCheckboxes.forEach(cb => {
+                    cb.checked = activeTags.includes(cb.value);
+                });
+            }
         }
 
         function handleFilterChange() {
             const selectedGroup1 = Array.from(group1FiltersSpan.querySelectorAll('input:checked')).map(cb => cb.value);
             const selectedGroup2 = Array.from(group2FiltersSpan.querySelectorAll('input:checked')).map(cb => cb.value);
+            const selectedTags = tagsFiltersSpan ? Array.from(tagsFiltersSpan.querySelectorAll('input:checked')).map(cb => cb.value) : [];
             
             const currentFilterVal = document.querySelector('input[name="currentFilter"]:checked').value;
             const filterErrors = document.getElementById('showErrors').checked;
@@ -915,6 +1046,7 @@
             socket.emit('updateFilters', {
                 group1: selectedGroup1,
                 group2: selectedGroup2,
+                tags: selectedTags,
                 minCurrent: currentFilterVal,
                 onlyErrors: filterErrors,
                 selectedMachines: selectedList,
@@ -959,6 +1091,19 @@
                 closeDetailModal();
             }
         }
+
+        // Handle Escape key to close modals
+        window.addEventListener('keydown', (event) => {
+            if (event.key === "Escape") {
+                if (detailModal.style.display === "block") {
+                    closeDetailModal();
+                } else if (fileModal.style.display === "block") {
+                    closeFileModal();
+                } else if (aboutModal.style.display === "block") {
+                    closeAboutModal();
+                }
+            }
+        });
 
         socket.on('connect', () => {
             statusBar.textContent = 'Connected to server';
@@ -1132,8 +1277,8 @@
         }
 
         function updateHeaders(registers) {
-            // Clear existing headers except first 6 (scan, machine, group1, group2, location, status)
-            while (tableHeader.children.length > 6) {
+            // Clear existing headers except first 4 (scan, machine, location, status)
+            while (tableHeader.children.length > 4) {
                 tableHeader.removeChild(tableHeader.lastChild);
             }
             
@@ -1173,7 +1318,11 @@
 
         function updateTable(utilities, registers, latestResults, config) {
             tableBody.innerHTML = '';
-            let totalKw = 0;
+            let totalKwAll = 0;
+            let totalKwNonGen = 0;
+            let countGen = 0;
+            let countNonGen = 0;
+
             const displayColumns = getDisplayColumns(registers);
 
             lastVisibleUtilities = [];
@@ -1252,6 +1401,11 @@
                     node: util.node
                 });
 
+                // Track Gen vs Non-Gen
+                const isGeneral = util.name.includes('GEN');
+                if (isGeneral) countGen++;
+                else countNonGen++;
+
                 const tr = document.createElement('tr');
                 tr.style.cursor = 'pointer';
                 tr.onclick = () => openDetail(util.id);
@@ -1270,17 +1424,17 @@
                 
                 // Machine
                 const tdName = document.createElement('td');
-                tdName.textContent = util.name;
+                if (isGeneral) {
+                    const badge = document.createElement('span');
+                    badge.className = 'general-node-badge';
+                    badge.textContent = util.name;
+                    tdName.appendChild(badge);
+                } else {
+                    tdName.textContent = util.name;
+                }
                 tr.appendChild(tdName);
 
-                // Group
-                const tdGroup1 = document.createElement('td');
-                tdGroup1.textContent = util.group1 || util.group || 'Unknown';
-                tr.appendChild(tdGroup1);
-
-                const tdGroup2 = document.createElement('td');
-                tdGroup2.textContent = util.group2 || '-';
-                tr.appendChild(tdGroup2);
+                // Group - REMOVED
 
                 // Location
                 const tdLoc = document.createElement('td');
@@ -1329,7 +1483,8 @@
                         const val = res.values ? res.values[reg.startAddress] : null;
                         
                         if (reg.label === 'kW' && val !== null && val !== undefined) {
-                            totalKw += val;
+                            totalKwAll += val;
+                            if (!isGeneral) totalKwNonGen += val;
                         }
 
                         if (val !== null && val !== undefined) {
@@ -1423,6 +1578,14 @@
                 selectAllCb.indeterminate = someSelected && !allSelected;
             }
 
+            // Determine finalTotalKw logic
+            // Rule: If we have generals AND non-generals, use sum of non-generals.
+            // If we have only generals, use full sum (which is effectively sum of generals).
+            // If we have only non-generals, use full sum (which matches sum of non-generals).
+            // Simplified: If (countGen > 0 && countNonGen > 0) use totalKwNonGen, else totalKwAll.
+            const mixedView = (countGen > 0 && countNonGen > 0);
+            const finalTotalKw = mixedView ? totalKwNonGen : totalKwAll;
+
             // Update Total Row in Footer
             tableFooter.innerHTML = '';
             if (document.getElementById('showTotalKw').checked) {
@@ -1433,10 +1596,11 @@
                 const tdName = document.createElement('td');
                 tdName.textContent = 'TOTAL';
                 tdName.style.color = '#4ec9b0';
+                if (mixedView) {
+                    tdName.title = "Summing non-general nodes only";
+                }
                 tr.appendChild(tdName);
                 
-                tr.appendChild(document.createElement('td')); // Group1
-                tr.appendChild(document.createElement('td')); // Group2
                 tr.appendChild(document.createElement('td')); // Location
                 tr.appendChild(document.createElement('td')); // Status
                 
@@ -1444,7 +1608,7 @@
                     const td = document.createElement('td');
                     td.className = 'val-cell';
                     if (col.type === 'single' && col.register.label === 'kW') {
-                        td.textContent = formatValue(totalKw, 'kW', config);
+                        td.textContent = formatValue(finalTotalKw, 'kW', config);
                         td.style.color = '#4ec9b0';
                     }
                     tr.appendChild(td);
