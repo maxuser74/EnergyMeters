@@ -103,7 +103,7 @@
         
         .val-cell {
             font-family: 'Consolas', 'Courier New', monospace;
-            text-align: right;
+            text-align: center;
         }
 
         .select-radio {
@@ -1286,6 +1286,7 @@
             cols.forEach(col => {
                 const th = document.createElement('th');
                 th.textContent = col.label;
+                th.style.textAlign = 'center';
                 tableHeader.appendChild(th);
             });
         }
