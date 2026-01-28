@@ -614,13 +614,15 @@
                         title: {
                             display: true,
                             text: 'Time',
-                            color: '#888'
+                            color: '#888',
+                            font: { size: 24 }
                         },
                         ticks: { 
                             color: '#d4d4d4',
                             maxRotation: 0,
                             autoSkip: true,
-                            maxTicksLimit: 10
+                            maxTicksLimit: 10,
+                            font: { size: 24 }
                         },
                         grid: { color: '#333' }
                     },
@@ -628,15 +630,17 @@
                         display: true,
                         beginAtZero: false, // Adapt to readings
                         grace: '5%', // Add some padding
-                        ticks: { color: '#d4d4d4' },
+                        ticks: { color: '#d4d4d4', font: { size: 24 } },
                         grid: { color: '#333' }
                     }
                 },
                 plugins: {
-                    legend: { labels: { color: '#d4d4d4' } },
+                    legend: { labels: { color: '#d4d4d4', font: { size: 24 } } },
                     tooltip: {
                         mode: 'index',
-                        intersect: false
+                        intersect: false,
+                        titleFont: { size: 24 },
+                        bodyFont: { size: 24 }
                     }
                 }
             };
