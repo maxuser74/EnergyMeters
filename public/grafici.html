@@ -169,7 +169,7 @@
             color: var(--text);
             padding: 8px 10px;
             border-radius: 999px;
-            font-size: 13px;
+            font-size: 26px;
             cursor: pointer;
             transition: all 0.15s ease;
         }
@@ -213,11 +213,11 @@
         }
         .chart-title {
             font-weight: 600;
-            font-size: 16px;
+            font-size: 32px;
         }
         .chart-subtitle {
             color: var(--muted);
-            font-size: 13px;
+            font-size: 26px;
         }
         .cards {
             display: grid;
@@ -301,17 +301,14 @@
                     <div class="chart-subtitle" id="sampleInfo"></div>
                 </div>
                 <div class="pill-wrap" style="margin-bottom: 15px;">
-                    <span style="font-size: 13px; color: var(--muted); display: flex; align-items: center; margin-right: 8px;">Moving Average:</span>
+                    <span style="font-size: 26px; color: var(--muted); display: flex; align-items: center; margin-right: 8px;">Moving Average:</span>
                     <button class="pill active" onclick="setMA(0, this)">Live</button>
+                    <button class="pill" onclick="setMA(5000, this)">5 sec</button>
+                    <button class="pill" onclick="setMA(10000, this)">10 sec</button>
                     <button class="pill" onclick="setMA(60000, this)">1 min</button>
                     <button class="pill" onclick="setMA(300000, this)">5 min</button>
                     <button class="pill" onclick="setMA(900000, this)">15 min</button>
                     <button class="pill" onclick="setMA(3600000, this)">1h</button>
-                    <div style="width: 1px; background: var(--border); margin: 0 8px;"></div>
-                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text);">
-                        <input type="checkbox" id="showCadence" style="accent-color: var(--accent);">
-                        Mostra cadenza (st/h)
-                    </label>
                 </div>
                 <canvas id="groupChart"></canvas>
             </div>
@@ -504,136 +501,12 @@
             const canvas = document.getElementById('groupChart');
             const ctx = canvas.getContext('2d');
 
-            const cadencePlugin = {
-                id: 'cadenceLabels',
-                afterDatasetsDraw(chart) {
-                    const checkbox = document.getElementById('showCadence');
-                    if (!checkbox || !checkbox.checked) return;
 
-                    const { ctx, scales: { x, y } } = chart;
-                    
-                    // Find target dataset (prefer "formatrice" or index 1 "purple/pink")
-                    let targetDatasetIndex = -1;
-                    chart.data.datasets.forEach((ds, i) => {
-                        if (ds.label && ds.label.toLowerCase().includes('formatrice')) {
-                            targetDatasetIndex = i;
-                        }
-                    });
-                    
-                    if (targetDatasetIndex === -1 && chart.data.datasets.length > 1) {
-                         targetDatasetIndex = 1;
-                    } else if (targetDatasetIndex === -1 && chart.data.datasets.length > 0) {
-                        targetDatasetIndex = 0;
-                    }
-
-                    if (targetDatasetIndex === -1) return;
-
-                    const meta = chart.getDatasetMeta(targetDatasetIndex);
-                    if (meta.hidden) return;
-
-                    const dataset = chart.data.datasets[targetDatasetIndex];
-                    const values = dataset.data;
-                    const count = values.length;
-                    
-                    if (count < 2) return;
-
-                    // Determine threshold for peak/edge detection
-                    let min = Infinity, max = -Infinity;
-                    for(let v of values) {
-                        if (v !== null && v !== undefined) {
-                            if (v < min) min = v;
-                            if (v > max) max = v;
-                        }
-                    }
-                    if (!isFinite(min)) return;
-
-                    // User configured thresholds: 
-                    // Cycle defined by passing 80 kW
-                    // Reset at 60 kW (hysteresis)
-                    const highThresh = 80;
-                    const lowThresh = 60;
-                    
-                    // We need timestamps to calculate delta time
-                    // state.timeline holds all timestamps. The chart shows the tail.
-                    // displayCount = count matches the end of state.timeline
-                    const timelineStartIdx = state.timeline.length - count;
-                    
-                    let lastPeakTime = null;
-                    let inPeak = false;
-                    
-                    
-                    for (let i = 0; i < count; i++) {
-                        const val = values[i];
-                        if (val === null || val === undefined) continue;
-                        
-                        if (!inPeak && val > highThresh) {
-                            // Rising edge found
-                            inPeak = true;
-                            
-                            const time = state.timeline[timelineStartIdx + i];
-                            
-                            if (lastPeakTime) {
-                                const diffMs = time - lastPeakTime;
-                                // Filter noise (e.g. < 2 seconds)
-                                if (diffMs > 2000) {
-                                    let piecesPerHour = (3600000 / diffMs);
-                                    
-                                    // Adjusted: Divide by 2
-                                    piecesPerHour = piecesPerHour / 2;
-
-                                    // Filter errors: max 150 st/h (increased to capture fast cycles around 100 st/h)
-                                    if (piecesPerHour <= 150) {
-                                        // Draw Label at this peak
-                                        const fx = x.getPixelForValue(i);
-                                        const fy = y.getPixelForValue(val) - 35; // Moved up slightly to accommodate larger badge
-                                        const text = `${Math.round(piecesPerHour)} st/h`;
-                                        
-                                        ctx.save();
-                                        // Increased font size +100% (from 20px to 40px)
-                                        ctx.font = "bold 40px 'Space Grotesk'";
-                                        ctx.textAlign = 'center';
-                                        ctx.textBaseline = 'middle';
-
-                                        // Create badge background
-                                        const metrics = ctx.measureText(text);
-                                        const width = metrics.width + 24; // More padding
-                                        const height = 50; // Taller badge
-                                        const xLeft = fx - width / 2;
-                                        const yTop = fy - height / 2;
-                                        
-                                        // Draw Badge Background
-                                        ctx.beginPath();
-                                        ctx.roundRect(xLeft, yTop, width, height, 12);
-                                        // High contrast color: Teal/Cyan dark background or similar contrasting color
-                                        // Since the curve is pink/purple, a dark cyan or deep blue/green provides good contrast
-                                        ctx.fillStyle = 'rgba(13, 148, 136, 0.95)'; // Teal-600 with high opacity
-                                        ctx.fill();
-                                        
-                                        // Draw Border for extra pop
-                                        ctx.lineWidth = 2;
-                                        ctx.strokeStyle = '#ffffff';
-                                        ctx.stroke();
-                                        
-                                        // Draw Text
-                                        ctx.fillStyle = '#ffffff';
-                                        ctx.fillText(text, fx, fy + 3); // Slightly adjust Y for vertical centering
-                                        
-                                        ctx.restore();
-                                    }
-                                }
-                            }
-                            lastPeakTime = time;
-                        } else if (inPeak && val < lowThresh) {
-                            inPeak = false;
-                        }
-                    }
-                }
-            };
 
             state.chart = new Chart(ctx, {
                 type: 'line',
                 data: { labels: [], datasets: [] },
-                plugins: [cadencePlugin],
+                plugins: [],
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
@@ -933,10 +806,6 @@
 
         els.groupSelect.addEventListener('change', (e) => {
             setGroup(e.target.value);
-        });
-
-        document.getElementById('showCadence').addEventListener('change', () => {
-            if (state.chart) state.chart.update();
         });
 
         function requestGroupData() {
