@@ -438,6 +438,11 @@ async function pollUtility(utility) {
                 result.values[reg.startAddress] = val * reg.factor;
             }
         }
+
+        if (Object.keys(result.values).length === 0) {
+            result.status = 'ERROR';
+            result.error = 'No data read';
+        }
     } catch (e) {
         result.status = 'ERROR';
         result.error = e.message;
